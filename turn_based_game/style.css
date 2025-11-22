@@ -461,66 +461,144 @@ body {
     display: none !important;
 }
 
+/* Status Container */
+.status-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+}
+
+.control-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 32px;
+    /* Larger for control icons */
+}
+
+.buff-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 16px;
+    /* Smaller for dots */
+    align-items: center;
+}
+
+.stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 20px;
+}
+
 /* Buff Icons */
 .buff-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background-color: #333;
-    border: 2px solid #fff;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 12px;
+    font-size: 10px;
     color: #fff;
     position: relative;
     cursor: help;
+    background-size: cover;
+    background-position: center;
 }
 
-/* Turn-based Effects (Blue) */
-.buff-icon.turn-effect {
-    border-color: #00bfff;
-    /* Deep Sky Blue */
-    box-shadow: 0 0 5px #00bfff;
-}
-
-/* Count-based Effects (Red) */
-.buff-icon.count-effect {
-    border-color: #ff4500;
-    /* Orange Red */
-    box-shadow: 0 0 5px #ff4500;
-}
-
-.buff-icon.undispellable {
-    box-shadow: 0 0 8px #ffd700;
-    /* Gold Glow */
-    border-color: #ffd700;
-}
-
-.buff-icon.status {
+/* Control Effects (Large Icons) */
+.buff-icon.control {
+    width: 32px;
+    height: 32px;
     border-radius: 4px;
-    width: auto;
-    padding: 0 4px;
-    background: #555;
-    color: #fff;
+    border: 1px solid #fff;
+    background-color: #2c3e50;
+    /* Fallback */
+    font-size: 10px;
+    text-align: center;
+    line-height: 10px;
 }
 
-.buff-icon.turn {
-    background: #8e44ad;
-    color: white;
-    border-color: #9b59b6;
+/* Turn-based Effects (Blue Dots) */
+.buff-icon.turn-effect {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #00bfff;
+    /* Deep Sky Blue */
+    border: 1px solid #fff;
+    box-shadow: 0 0 3px #00bfff;
+    font-size: 0;
+    /* Hide text inside dot */
 }
 
-/* Count-based Effect Style */
+/* Count-based Effects (Red Dots) */
 .buff-icon.count-effect {
-    background: #d35400;
-    border-color: #e67e22;
-    border-style: dashed;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #ff0000;
+    /* Solid Red */
+    border: 1px solid #fff;
+    box-shadow: 0 0 3px #ff0000;
+    font-size: 0;
+    /* Hide text inside dot */
 }
 
-.buff-icon.undispellable {
-    box-shadow: 0 0 5px gold;
-    border: 1px solid gold;
+/* Shield UI */
+.buff-icon.shield {
+    width: 16px;
+    height: 18px;
+    background-color: #f1c40f;
+    border: 1px solid #fff;
+    border-radius: 0 0 50% 50%;
+    /* Shield shape approximation */
+    box-shadow: 0 0 3px #f1c40f;
+    font-size: 0;
+}
+
+/* Stats */
+.buff-icon.stat {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #333;
+    border: 1px solid #fff;
+    font-size: 10px;
+}
+
+.buff-icon.up {
+    border-color: #2ecc71;
+    color: #2ecc71;
+}
+
+.buff-icon.down {
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+/* Floating Text */
+.floating-text {
+    position: absolute;
+    font-weight: bold;
+    font-size: 14px;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+    animation: floatUpFade 1.5s forwards;
+    z-index: 1000;
+    white-space: nowrap;
+}
+
+@keyframes floatUpFade {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
 }
 
 /* Modals */

@@ -86,7 +86,9 @@ class Game {
                     { name: "毒雾", type: "buff", effect: "poison", desc: "3回合内每回合扣除1/8体力" },
                     { name: "催眠", type: "buff", effect: "sleep", desc: "2回合内无法行动" },
                     { name: "暗影球", type: "attack", power: 80, desc: "普通攻击" },
-                    { name: "自我再生", type: "buff", effect: "regen", desc: "5回合内每回合恢复1/8体力" }
+                    { name: "自我再生", type: "buff", effect: "regen", desc: "5回合内每回合恢复1/8体力" },
+                    { name: "鬼火", type: "buff", effect: "burn", desc: "烧伤对手，攻击减半" },
+                    { name: "奇异之光", type: "buff", effect: "fear", desc: "使对手害怕" }
                 ]
             },
             {
@@ -98,7 +100,8 @@ class Game {
                     { name: "龙之舞", type: "buff", effect: "stats_all", desc: "全属性+1" },
                     { name: "破坏光线", type: "attack", power: 150, desc: "强大攻击" },
                     { name: "铁壁", type: "buff", effect: "defense_2", desc: "防御+2，抵挡1次伤害" },
-                    { name: "威吓", type: "buff", effect: "weakness", desc: "削弱对手攻击" }
+                    { name: "逆鳞", type: "attack", power: 120, desc: "连续攻击" },
+                    { name: "威吓", type: "buff", effect: "attack_down", desc: "对手攻击-1" }
                 ]
             },
             {
@@ -321,34 +324,71 @@ class Game {
     }
 
     renderTurnEffects(char, container) {
-        if (!container) return;
-        container.innerHTML = '';
+        // Container is now the parent .status-container. We need to find children.
+        // Actually, I passed the container ID in updateUI.
+        // Let's change updateUI to pass the char and I'll find the rows by ID prefix.
+        // Or I can just find them here if I know if it's player or enemy.
 
-        // 1. Status Effects (Debuffs/CC) - Turn Based
+        const isPlayer = char === this.player;
+        const prefix = isPlayer ? 'player' : 'enemy';
+
+        const controlRow = document.getElementById(`${prefix}-control-row`);
+        const buffRow = document.getElementById(`${prefix}-buff-row`);
+        const statRow = document.getElementById(`${prefix}-stat-row`);
+
+        if (!controlRow || !buffRow || !statRow) return;
+
+        controlRow.innerHTML = '';
+        buffRow.innerHTML = '';
+        statRow.innerHTML = '';
+
+        // 1. Control Effects (Top Row)
+        // poison, sleep, paralyze, burn, freeze, fear, bind
+        const controlIds = ['poison', 'sleep', 'paralyze', 'burn', 'freeze', 'fear', 'bind'];
         char.buffs.turnEffects.forEach(effect => {
-            let className = `turn-effect turn ${effect.id}`;
-            if (effect.isCount) className += ' count-effect';
-            if (effect.cannotDispel) className += ' undispellable';
-            this.createBuffIcon(container, effect.name, effect.turns, className, this.getEffectDescription(effect.id));
+            if (controlIds.includes(effect.id)) {
+                this.createBuffIcon(controlRow, effect.name, effect.turns, 'control', this.getEffectDescription(effect.id));
+            }
         });
 
-        // 2. Positive Turn-based Effects - Turn Based
-        if (char.buffs.reflectDamage > 0) this.createBuffIcon(container, '反弹', char.buffs.reflectDamage, 'status count', this.getEffectDescription('reflect'));
-        if (char.buffs.absorbHp > 0) this.createBuffIcon(container, '吸血', char.buffs.absorbHp, 'status turn', this.getEffectDescription('absorb'));
-        if (char.buffs.critNext > 0) this.createBuffIcon(container, '致命', char.buffs.critNext, 'status turn', this.getEffectDescription('crit'));
-        if (char.buffs.priorityNext > 0) this.createBuffIcon(container, '先制', char.buffs.priorityNext, 'status turn', this.getEffectDescription('priority'));
-        if (char.buffs.immuneAbnormal > 0) this.createBuffIcon(container, '免控', char.buffs.immuneAbnormal, 'status turn', this.getEffectDescription('immune_cc'));
-        if (char.buffs.immuneStatDrop > 0) this.createBuffIcon(container, '免弱', char.buffs.immuneStatDrop, 'status turn', this.getEffectDescription('immune_stat'));
-        if (char.buffs.damageBoostNext > 0) this.createBuffIcon(container, '增伤', char.buffs.damageBoostNext, 'status count', this.getEffectDescription('damage_boost'));
+        // 2. Buffs (Turn & Count) (Middle Row)
+        // Turn Effects (Blue Dots)
+        const turnIds = ['immune_stat_drop', 'immune_cc', 'priority', 'crit', 'absorb', 'reflect', 'damage_boost', 'immune_stat_up', 'water_curse', 'reflect_status'];
+        // Filter out controls
+        char.buffs.turnEffects.forEach(effect => {
+            if (!controlIds.includes(effect.id)) {
+                // Check if it's a known turn effect or generic
+                let className = 'turn-effect';
+                if (effect.cannotDispel) className += ' undispellable';
+                this.createBuffIcon(buffRow, '', effect.turns, className, `${effect.name}: ${this.getEffectDescription(effect.id)}`);
+            }
+        });
 
-        // Solensen / Surging Canglan Specific
-        if (char.buffs.blockAttack > 0) this.createBuffIcon(container, '封攻', char.buffs.blockAttack, 'status count', this.getEffectDescription('block_att'));
-        if (char.buffs.blockAttribute > 0) this.createBuffIcon(container, '封属', char.buffs.blockAttribute, 'status count', this.getEffectDescription('block_attr'));
-        if (char.buffs.immuneAbnormalCount > 0) this.createBuffIcon(container, '免控', char.buffs.immuneAbnormalCount, 'status count', this.getEffectDescription('immune_cc_count'));
-        if (char.buffs.waterCurseStack > 0) this.createBuffIcon(container, '水厄', char.buffs.waterCurseStack, 'status count', `水厄层数: ${char.buffs.waterCurseStack}`);
+        // Positive Turn Effects (stored in properties)
+        if (char.buffs.reflectDamage > 0) this.createBuffIcon(buffRow, '', char.buffs.reflectDamage, 'count-effect', `反弹伤害: ${char.buffs.reflectDamage}次`);
+        if (char.buffs.absorbHp > 0) this.createBuffIcon(buffRow, '', char.buffs.absorbHp, 'turn-effect', `吸血: ${char.buffs.absorbHp}回合`);
+        if (char.buffs.critNext > 0) this.createBuffIcon(buffRow, '', char.buffs.critNext, 'turn-effect', `致命一击: ${char.buffs.critNext}回合`);
+        if (char.buffs.priorityNext > 0) this.createBuffIcon(buffRow, '', char.buffs.priorityNext, 'turn-effect', `先制: ${char.buffs.priorityNext}回合`);
+        if (char.buffs.immuneAbnormal > 0) this.createBuffIcon(buffRow, '', char.buffs.immuneAbnormal, 'turn-effect', `免疫异常: ${char.buffs.immuneAbnormal}回合`);
+        if (char.buffs.immuneStatDrop > 0) this.createBuffIcon(buffRow, '', char.buffs.immuneStatDrop, 'turn-effect', `免疫弱化: ${char.buffs.immuneStatDrop}回合`);
+        if (char.buffs.damageBoostNext > 0) this.createBuffIcon(buffRow, '', char.buffs.damageBoostNext, 'turn-effect', `伤害提升: ${char.buffs.damageBoostNext}回合`); // Changed to Turn Effect as per user request ("Solensen Abandon Spirit is turn effect")
 
-        // Count Based
-        if (char.buffs.shield > 0) this.createBuffIcon(container, '抵挡', 1, 'status count', this.getEffectDescription('shield'));
+        // Count Effects (Red Dots)
+        if (char.buffs.blockAttack > 0) this.createBuffIcon(buffRow, '', char.buffs.blockAttack, 'count-effect', `封锁攻击: ${char.buffs.blockAttack}次`);
+        if (char.buffs.blockAttribute > 0) this.createBuffIcon(buffRow, '', char.buffs.blockAttribute, 'count-effect', `封锁属性: ${char.buffs.blockAttribute}次`);
+        if (char.buffs.immuneAbnormalCount > 0) this.createBuffIcon(buffRow, '', char.buffs.immuneAbnormalCount, 'count-effect', `免疫异常: ${char.buffs.immuneAbnormalCount}次`);
+        if (char.buffs.waterCurseStack > 0) this.createBuffIcon(buffRow, '', char.buffs.waterCurseStack, 'count-effect', `水厄层数: ${char.buffs.waterCurseStack}`);
+
+        // Shield (Shield UI)
+        if (char.buffs.shield > 0) this.createBuffIcon(buffRow, '', char.buffs.shield, 'shield', `抵挡攻击: ${char.buffs.shield}次`);
+
+        // 3. Stats (Bottom Row)
+        for (const [stat, val] of Object.entries(char.buffs.statUps)) {
+            if (val !== 0) {
+                const label = this.getStatLabel(stat);
+                this.createBuffIcon(statRow, `${label}${val > 0 ? '+' : ''}${val}`, val, 'stat', `${label} ${val > 0 ? '提升' : '下降'} ${Math.abs(val)} 等级`);
+            }
+        }
     }
 
     renderBuffs(char, container) {
@@ -361,11 +401,16 @@ class Game {
         }
     }
 
+    getStatLabel(stat) {
+        const map = { attack: '攻', defense: '防', specialAttack: '特攻', specialDefense: '特防', speed: '速', accuracy: '准', evasion: '闪' };
+        return map[stat] || stat;
+    }
+
     createBuffIcon(container, label, val, type = null, desc = null) {
         const icon = document.createElement('div');
         icon.className = `buff-icon ${type ? type : (val > 0 ? 'up' : 'down')}`;
-        let symbol = label;
-        if (!type) {
+        if (type === 'stat') {
+            let symbol;
             switch (label) {
                 case 'attack': symbol = '⚔️'; break;
                 case 'defense': symbol = '🛡️'; break;
@@ -402,29 +447,53 @@ class Game {
     }
 
     updateSkillButtons() {
-        const p = this.player;
-        for (let i = 0; i < 5; i++) {
-            const skill = p.skills[i];
-            if (!skill) continue;
+        const container = this.ui.skillsGrid;
+        container.innerHTML = '';
 
-            const nameEl = document.getElementById(`skill-name-${i}`);
-            const powerEl = document.getElementById(`skill-power-${i}`);
-            const ppEl = document.getElementById(`pp-${i}`);
-            const iconEl = document.getElementById(`skill-icon-${i}`);
+        // Sort skills: 160 Power (Ultimate) first
+        const sortedSkills = [...this.player.skills].sort((a, b) => {
+            if (a.power === 160) return -1;
+            if (b.power === 160) return 1;
+            return 0;
+        });
 
-            if (nameEl) nameEl.innerText = skill.name;
-            if (powerEl) powerEl.innerText = `威力: ${skill.power || 0}`;
-            if (ppEl) ppEl.innerText = `PP: ${skill.pp}/${skill.maxPp}`;
+        sortedSkills.forEach((skill, index) => {
+            const btn = document.createElement('button');
+            const isUlt = skill.type === 'ultimate' || skill.power === 160;
+            btn.className = `skill-btn ${isUlt ? 'ult' : ''}`;
 
-            // Update icons based on skill type
-            if (iconEl) {
-                if (skill.type === 'attack') iconEl.innerText = '⚔️';
-                else if (skill.type === 'buff') iconEl.innerText = '✨';
-                else if (skill.type === 'ultimate') iconEl.innerText = '👑';
+            // Check if blocked
+            let blocked = false;
+            if (skill.type === 'buff' && this.player.buffs.blockAttribute > 0) blocked = true;
+            if ((skill.type === 'attack' || skill.type === 'ultimate') && this.player.buffs.blockAttack > 0) blocked = true;
+
+            if (blocked) {
+                btn.classList.add('skill-blocked');
+                btn.disabled = true;
             }
-        }
-        // Update sprite
-        this.ui.playerSprite.src = p.asset;
+
+            btn.innerHTML = `
+                <div class="skill-info">
+                    <span class="skill-name">${skill.name}</span>
+                    <span class="skill-power">威力: ${skill.power}</span>
+                    <span class="skill-pp">PP: ${skill.pp}/${skill.maxPp}</span>
+                </div>
+            `;
+
+            // Find original index for useSkill
+            const originalIndex = this.player.skills.indexOf(skill);
+            btn.onclick = () => this.useSkill(originalIndex);
+
+            // Tooltip
+            btn.onmouseenter = (e) => this.showTooltip(e, skill.desc);
+            btn.onmouseleave = () => this.hideTooltip();
+
+            container.appendChild(btn);
+        });
+
+        // Left Panel (Ultimate? No, user said 160 power is 5th skill, put on far left. I did that in sort.)
+        // The left panel container logic in original code was just a placeholder or for specific layout.
+        // I'll leave it empty or use it if needed.
     }
 
     showTooltip(event, type) {
@@ -437,6 +506,8 @@ class Game {
         } else if (typeof type === 'number') {
             const skill = this.player.skills[type];
             content = `【${skill.name}】\n${skill.desc}`;
+        } else if (typeof type === 'string') { // For skill description directly
+            content = type;
         }
 
         tooltip.innerText = content;
@@ -599,7 +670,6 @@ class Game {
                 setTimeout(() => btn.classList.remove('skill-blocked'), 500);
             }
             return;
-            return;
         }
 
         // 3. Check Solensen Blocks
@@ -659,301 +729,133 @@ class Game {
             if (this.player.hp > this.enemy.hp) {
                 this.log("魂印触发！对手被焚烬！");
                 this.addTurnEffect(this.enemy, '焚烬', 2, 'burn');
-            } else {
-                this.log("魂印触发！消除对手回合效果！");
-                this.enemy.buffs.turnEffects = [];
+                // We need to track stacks. Let's use `waterCurseStack` property on enemy.
+                this.enemy.buffs.waterCurseStack = (this.enemy.buffs.waterCurseStack || 0) + 1;
+                if (this.enemy.buffs.waterCurseStack > 4) this.enemy.buffs.waterCurseStack = 4; // Max 80% (4 stacks of 20%)
+
+                this.addTurnEffect(this.enemy, '水厄', 2, 'water_curse'); // 2 Turns? Or Permanent?
+                // User said: "cannot be dispelled, but same UI as turn effect".
+                // "Continuous use adds 20%, max 80%".
+                // This implies it's a persistent effect or refreshed.
+                // Let's make it a turn effect with long duration or special handling?
+                // "cannot be dispelled" -> I need to handle this in dispel logic.
+                // For now, I'll add it as a turn effect.
+
+                damage = await this.dealDamage(this.enemy, skill.power, true, true, true); // sureHit, ignoreResist, ignoreShield
             }
-        }
+            else if (skill.name === "王·碧海潮生") {
+                this.modifyStats(this.enemy, { attack: -1, defense: -1, speed: -1, specialAttack: -1, specialDefense: -1, accuracy: -1, evasion: -1 });
+                // Reverse Self Negative Only
+                const reversed = this.reverseStats(this.player, false); // false = only negative (default behavior of my updated reverseStats? No, I added `onlyPositive` flag. Default is `false` which reverses negative. Wait.
+                // My updated reverseStats: `reverseStats(target, onlyPositive = false)`
+                // If `onlyPositive` is false, it reverses negative.
+                // So `this.reverseStats(this.player)` reverses negative. Correct.
 
-        this.log(`${this.player.name}使用了 【${skill.name}】!`);
+                if (reversed) {
+                    this.addTurnEffect(this.player, '免弱', 2, 'immune_stat_drop'); // Turn Effect
+                    this.log("反转成功！2回合免弱！");
+                }
+                damage = await this.dealDamage(this.enemy, skill.power, true);
+            }
+            else if (skill.name === "浮生若梦") {
+                let boost = 1;
+                if (this.player.buffs.shieldHp > 0) boost = 2;
+                this.modifyStats(this.player, { attack: boost, defense: boost, speed: boost, specialAttack: boost, specialDefense: boost });
 
-        this.ui.playerSprite.classList.add('attack-lunge');
-        await this.wait(500);
-        this.ui.playerSprite.classList.remove('attack-lunge');
-
-        // --- Skill Logic Implementation ---
-        let damage = 0;
-
-        // King Gaia Skills
-        if (this.player.name === "王·盖亚") {
-            if (skill.name === "战霸天下") {
                 this.player.buffs.immuneAbnormal = 4;
-                this.player.buffs.immuneStatDrop = 5;
-                this.player.buffs.immuneAbnormal = 4;
-                this.player.buffs.immuneStatDrop = 5;
-                this.player.buffs.reflectDamage = 1; // Count: 1 (Next damage)
                 this.addTurnEffect(this.player, '反弹异常', 4, 'reflect_status');
-                this.log("免疫异常与能力下降，4回合内反弹伤害和异常！");
-            }
-            else if (skill.name === "不败之境") {
-                const mult = (this.player.hp > this.player.maxHp / 2) ? 2 : 1;
-                this.modifyStats(this.player, { attack: mult, defense: mult, speed: mult, specialAttack: mult, specialDefense: mult });
-                this.player.buffs.absorbHp = 4;
+
+                this.player.buffs.damageBoostNext = 2; // Self Damage Boost
                 this.player.buffs.priorityNext = 2;
-                this.log(`全属性 +${mult}！开始吸取体力！`);
+                this.log(`全属性+${boost}！免疫反弹异常！自身增伤！自身先制！`);
             }
-            else if (skill.name === "天诛乱舞") {
-                const reversed = this.reverseStats(this.player);
-                damage = await this.dealDamage(this.enemy, skill.power, true);
-                if (reversed) {
-                    this.addTurnEffect(this.enemy, '害怕', 2, 'fear');
-                    this.log("反转成功！对手害怕2回合！");
-                }
-            }
-            else if (skill.name === "天威力破") {
-                const removed = this.enemy.buffs.turnEffects.length > 0;
-                this.enemy.buffs.turnEffects = [];
-                if (removed) {
-                    this.log("消除成功！免疫下1次异常！");
-                    this.player.buffs.immuneAbnormal = Math.max(this.player.buffs.immuneAbnormal, 1); // At least 1 turn
-                }
-                damage = await this.dealDamage(this.enemy, skill.power);
-                if (damage < 280) {
-                    this.player.buffs.critNext = 2;
-                    this.log("伤害<280，下2回合致命！");
-                }
-            }
-            else if (skill.name === "王·圣勇战意") {
-                if (this.hasStatUps(this.enemy)) {
-                    this.log("偷取强化！");
-                    this.heal(this.player, 300);
-                    this.stealStats(this.player, this.enemy);
-                    this.player.buffs.priorityNext = 2; // "If enemy has stats, priority +2" (interpreted as next turn or this skill? Skill desc says "this skill priority +2", but logic is usually pre-check. Here we grant future priority or just handle it. The prompt said 'Steal -> Heal 300'. 'If enemy has stats -> Self priority +2'. Let's assume it means next turns for simplicity or we missed the pre-check priority. Actually, priority check is done before useSkill. So this effect might be for NEXT use? Or it was dynamic. Let's just give priorityNext for now.)
-                }
-                damage = await this.dealDamage(this.enemy, skill.power, true, true);
-            }
-        }
-        // Agnes Skills
-        else if (this.player.name === "不灭·艾恩斯") {
-            if (skill.name === "王·酷烈风息") {
-                const reversed = this.reverseStats(this.player);
-                if (reversed) {
-                    this.player.buffs.immuneAbnormal = Math.max(this.player.buffs.immuneAbnormal, 1);
-                    this.log("反转成功！免疫下1次异常！");
-                }
-                damage = await this.dealDamage(this.enemy, skill.power, true);
-                if (damage < 300) {
-                    this.addTurnEffect(this.enemy, '焚烬', 2, 'burn');
-                    this.log("伤害<300，对手焚烬！");
+            else if (skill.name === "沧海永存") {
+                if (Math.random() < 0.8) {
+                    this.addTurnEffect(this.enemy, '冰封', 2, 'freeze');
+                    this.log("对手冰封！");
                 } else {
-                    this.player.buffs.damageBoostNext = 1; // +100%
-                    this.log("伤害>=300，下回合伤害翻倍！");
+                    this.player.buffs.bindNext = 2;
+                    this.log("未触发冰封，下2回合攻击附加束缚！");
+                }
+
+                const currentHp = this.player.hp;
+                const maxHp = this.player.maxHp;
+                const healAmount = maxHp - currentHp;
+                this.heal(this.player, maxHp, "恢复"); // Full heal
+
+                if (currentHp < maxHp / 2) {
+                    const fixDmg = healAmount; // "Equal fixed damage"
+                    this.enemy.hp = Math.max(0, this.enemy.hp - fixDmg);
+                    this.log(`体力<1/2，附加 ${fixDmg} 固伤！`);
+                    this.showDamageNumber(fixDmg, false, 'pink');
                 }
             }
-            else if (skill.name === "火焰精核") {
-                const hasStatus = this.enemy.buffs.turnEffects.some(e => ['burn', 'silence', 'poison', 'sleep', 'paralyze', 'fear'].includes(e.id));
-                let mult = hasStatus ? 2 : 1;
-                this.modifyStats(this.player, { attack: mult, defense: mult, speed: mult, specialAttack: mult, specialDefense: mult });
+            else if (skill.name === "上善若水") {
+                // Reverse Enemy Buffs
+                // Logic: Check enemy positive stats. If any, reverse them.
+                // "Reverse enemy stat UP status"
+                // If success -> Copy. If fail -> Dispel.
+                // Wait, "Reverse" usually means +1 becomes -1.
+                // "Reverse success" means there WAS something to reverse.
 
-                // Heal/Fixed Dmg
-                let absorbTurns = 4;
-                if (this.player.hp < this.player.maxHp / 2) {
-                    this.log("体力<1/2，效果翻倍！");
-                    // Double the effect could mean double turns or double amount. Usually double amount.
-                    // We'll handle double amount in handleEndTurn by checking a flag or just adding a stronger buff.
-                    // For simplicity, let's just say it adds a special 'absorb_strong' or we handle it in logic.
-                    // Let's use a flag on the buff? The buff system is simple. 
-                    // Let's just add 2 stacks of absorb? No.
-                    // Let's add a specific 'absorb_boost' flag.
-                    this.player.buffs.absorbBoost = true;
-                }
-                this.player.buffs.absorbHp = absorbTurns;
-                this.player.buffs.priorityNext = 2;
-                this.log(`全属性 +${mult}！`);
-            }
-            else if (skill.name === "火种永存") {
-                this.player.buffs.immuneAbnormal = 5;
-                this.player.buffs.shield = 1;
-                this.addTurnEffect(this.player, '火种', 4, 'eternal_fire'); // Passive effect on self
-                this.log("免疫异常，免疫下一次攻击，火种永存！");
-            }
-            else if (skill.name === "秩序之助") {
-                const hasEffects = this.enemy.buffs.turnEffects.length > 0;
-                if (hasEffects) {
-                    this.log("消除对手回合效果成功！");
-                    this.enemy.buffs.turnEffects = [];
-                    this.addTurnEffect(this.enemy, '沉默', 2, 'silence');
-                    this.log("对手沉默2回合！");
-                } else {
-                    this.log("对手没有回合效果，消除失败！");
-                }
-                damage = await this.dealDamage(this.enemy, skill.power);
-            }
-            else if (skill.name === "王·焚世烈焰") {
-                const cleared = this.clearStats(this.enemy);
-                if (cleared) this.player.buffs.priorityNext = 1;
-
-                let mult = 1;
-                const hasStatus = this.enemy.buffs.turnEffects.some(e => ['burn', 'silence', 'poison', 'sleep', 'paralyze', 'fear'].includes(e.id));
-                if (hasStatus) {
-                    mult = 1.75;
-                    this.log("对手异常，伤害提升75%！");
-                } else {
-                    const steal = Math.floor(this.enemy.maxHp / 8); // Nerfed to 1/8
-                    this.enemy.hp = Math.max(0, this.enemy.hp - steal);
-                    this.heal(this.player, steal, "吸取");
-                    this.showDamageNumber(steal, false, 'pink');
-                }
-                damage = await this.dealDamage(this.enemy, skill.power * mult, true, true);
-            }
-            // Surging Canglan Skills
-            else if (this.player.name === "怒涛·沧岚") {
-                // Soul Mark: Stack Damage
-                if (skill.type === 'attack' || skill.type === 'ultimate') {
-                    this.player.buffs.damageStack = Math.min(4, this.player.buffs.damageStack + 1);
-                }
-
-                // Bind Application (From 'Canghai Yongcun')
-                if (this.player.buffs.bindNext > 0 && (skill.type === 'attack' || skill.type === 'ultimate')) {
-                    this.addTurnEffect(this.enemy, '束缚', 2, 'bind');
-                    this.log("触发效果！对手被束缚！");
-                    this.player.buffs.bindNext--;
-                }
-
-                if (skill.name === "王·洛水惊鸿") {
-                    // Dispel
-                    const hadEffects = this.enemy.buffs.turnEffects.length > 0;
-                    this.enemy.buffs.turnEffects = []; // Clear all (Turn based)
-
-                    if (hadEffects) {
-                        this.addTurnEffect(this.enemy, '冰封', 2, 'freeze');
-                        this.log("消除成功！对手冰封！");
-                    } else {
-                        // Immune Abnormal (Count 1)
-                        this.player.buffs.immuneAbnormalCount = 1;
-                        this.log("消除失败，免疫下1次异常！");
-                    }
-
-                    // Water Curse (Stacking Fixed Damage)
-                    // "Water Curse": 20% Max HP Fixed Damage. Stacks up to 80%.
-                    // We need to track stacks. Let's use `waterCurseStack` property on enemy.
-                    this.enemy.buffs.waterCurseStack = (this.enemy.buffs.waterCurseStack || 0) + 1;
-                    if (this.enemy.buffs.waterCurseStack > 4) this.enemy.buffs.waterCurseStack = 4; // Max 80% (4 stacks of 20%)
-
-                    this.addTurnEffect(this.enemy, '水厄', 2, 'water_curse'); // 2 Turns? Or Permanent?
-                    // User said: "cannot be dispelled, but same UI as turn effect".
-                    // "Continuous use adds 20%, max 80%".
-                    // This implies it's a persistent effect or refreshed.
-                    // Let's make it a turn effect with long duration or special handling?
-                    // "cannot be dispelled" -> I need to handle this in dispel logic.
-                    // For now, I'll add it as a turn effect.
-
-                    damage = await this.dealDamage(this.enemy, skill.power, true, true, true); // sureHit, ignoreResist, ignoreShield
-                }
-                else if (skill.name === "王·碧海潮生") {
-                    this.modifyStats(this.enemy, { attack: -1, defense: -1, speed: -1, specialAttack: -1, specialDefense: -1, accuracy: -1, evasion: -1 });
-                    // Reverse Self Negative Only
-                    const reversed = this.reverseStats(this.player, false); // false = only negative (default behavior of my updated reverseStats? No, I added `onlyPositive` flag. Default is `false` which reverses negative. Wait.
-                    // My updated reverseStats: `reverseStats(target, onlyPositive = false)`
-                    // If `onlyPositive` is false, it reverses negative.
-                    // So `this.reverseStats(this.player)` reverses negative. Correct.
-
-                    if (reversed) {
-                        this.addTurnEffect(this.player, '免弱', 2, 'immune_stat_drop'); // Turn Effect
-                        this.log("反转成功！2回合免弱！");
-                    }
-                    damage = await this.dealDamage(this.enemy, skill.power, true);
-                }
-                else if (skill.name === "浮生若梦") {
-                    let boost = 1;
-                    if (this.player.buffs.shieldHp > 0) boost = 2;
-                    this.modifyStats(this.player, { attack: boost, defense: boost, speed: boost, specialAttack: boost, specialDefense: boost });
-
-                    this.player.buffs.immuneAbnormal = 4;
-                    this.addTurnEffect(this.player, '反弹异常', 4, 'reflect_status');
-
-                    this.player.buffs.damageBoostNext = 2; // Self Damage Boost
-                    this.player.buffs.priorityNext = 2;
-                    this.log(`全属性+${boost}！免疫反弹异常！自身增伤！自身先制！`);
-                }
-                else if (skill.name === "沧海永存") {
-                    if (Math.random() < 0.8) {
-                        this.addTurnEffect(this.enemy, '冰封', 2, 'freeze');
-                        this.log("对手冰封！");
-                    } else {
-                        this.player.buffs.bindNext = 2;
-                        this.log("未触发冰封，下2回合攻击附加束缚！");
-                    }
-
-                    const currentHp = this.player.hp;
-                    const maxHp = this.player.maxHp;
-                    const healAmount = maxHp - currentHp;
-                    this.heal(this.player, maxHp, "恢复"); // Full heal
-
-                    if (currentHp < maxHp / 2) {
-                        const fixDmg = healAmount; // "Equal fixed damage"
-                        this.enemy.hp = Math.max(0, this.enemy.hp - fixDmg);
-                        this.log(`体力<1/2，附加 ${fixDmg} 固伤！`);
-                        this.showDamageNumber(fixDmg, false, 'pink');
+                let hasUp = false;
+                for (let k in this.enemy.buffs.statUps) {
+                    if (this.enemy.buffs.statUps[k] > 0) {
+                        hasUp = true;
+                        this.enemy.buffs.statUps[k] *= -1;
                     }
                 }
-                else if (skill.name === "上善若水") {
-                    // Reverse Enemy Buffs
-                    // Logic: Check enemy positive stats. If any, reverse them.
-                    // "Reverse enemy stat UP status"
-                    // If success -> Copy. If fail -> Dispel.
-                    // Wait, "Reverse" usually means +1 becomes -1.
-                    // "Reverse success" means there WAS something to reverse.
+                this.updateUI();
 
-                    let hasUp = false;
+                if (hasUp) {
+                    this.log("反转了对手的强化！");
+                    // Copy (Apply same positive to self? Or the reversed negative? "Attached same capability elevation")
+                    // "Self attached same capability elevation" -> Copy the ORIGINAL positive stats?
+                    // Usually "Copy" means copy the positive stats.
+                    // But we just reversed them.
+                    // Let's assume we copy the MAGNITUDE as positive.
+                    // Or we copy what they HAD.
+                    // Let's copy what they HAD.
+                    // But we need to know what they had.
+                    // Let's simplify: If reversed, give self +1 to those stats?
+                    // Or better: Store what was reversed.
+                    // For simplicity: If reversed, give self All Stats +1? No.
+                    // Let's just say "Copy" = Give self the same stats that were reversed (as positive).
+                    // Since we just multiplied by -1, the current value is negative. So we take abs().
                     for (let k in this.enemy.buffs.statUps) {
-                        if (this.enemy.buffs.statUps[k] > 0) {
-                            hasUp = true;
-                            this.enemy.buffs.statUps[k] *= -1;
+                        if (this.enemy.buffs.statUps[k] < 0) { // It was positive, now negative
+                            this.player.buffs.statUps[k] = (this.player.buffs.statUps[k] || 0) + Math.abs(this.enemy.buffs.statUps[k]);
                         }
                     }
-                    this.updateUI();
+                    this.log("复制了对手的强化！");
+                } else {
+                    // Fail -> Dispel (Eliminate enemy capability elevation)
+                    // But we already checked `hasUp`. If `!hasUp`, there is nothing to dispel.
+                    // "Reverse fail then eliminate".
+                    // Maybe it means "Try to reverse. If fail (no up?), eliminate".
+                    // If no up, eliminate does nothing.
+                    // Maybe it means "Eliminate Turn Effects"? No "Capability Elevation" usually means Stats.
+                    // So if they have no stats, we do nothing?
+                    // Text: "反转对手能力提升状态，反转成功则自身附加相同的能力提升，反转失败则消除对手能力提升状态"
+                    // This logic implies if we CAN'T reverse, we Dispel.
+                    // But if we can't reverse, it means there are no stats to reverse. So Dispel is redundant?
+                    // UNLESS "Reverse" has a chance? Or "Reverse" applies to specific things?
+                    // Usually in Seer, "Reverse" works on positive stats.
+                    // If they have no positive stats, Reverse fails.
+                    // Then "Dispel" happens. But Dispel removes positive stats.
+                    // So if they have no positive stats, Dispel also does nothing.
+                    // This might be a catch-all or I'm missing a nuance.
+                    // Maybe it means "Eliminate Turns"? No.
+                    // I'll just implement: Reverse if possible. If not, call clearStats (which does nothing but safe).
+                    this.clearStats(this.enemy);
+                }
 
-                    if (hasUp) {
-                        this.log("反转了对手的强化！");
-                        // Copy (Apply same positive to self? Or the reversed negative? "Attached same capability elevation")
-                        // "Self attached same capability elevation" -> Copy the ORIGINAL positive stats?
-                        // Usually "Copy" means copy the positive stats.
-                        // But we just reversed them.
-                        // Let's assume we copy the MAGNITUDE as positive.
-                        // Or we copy what they HAD.
-                        // Let's copy what they HAD.
-                        // But we need to know what they had.
-                        // Let's simplify: If reversed, give self +1 to those stats?
-                        // Or better: Store what was reversed.
-                        // For simplicity: If reversed, give self All Stats +1? No.
-                        // Let's just say "Copy" = Give self the same stats that were reversed (as positive).
-                        // Since we just multiplied by -1, the current value is negative. So we take abs().
-                        for (let k in this.enemy.buffs.statUps) {
-                            if (this.enemy.buffs.statUps[k] < 0) { // It was positive, now negative
-                                this.player.buffs.statUps[k] = (this.player.buffs.statUps[k] || 0) + Math.abs(this.enemy.buffs.statUps[k]);
-                            }
-                        }
-                        this.log("复制了对手的强化！");
-                    } else {
-                        // Fail -> Dispel (Eliminate enemy capability elevation)
-                        // But we already checked `hasUp`. If `!hasUp`, there is nothing to dispel.
-                        // "Reverse fail then eliminate".
-                        // Maybe it means "Try to reverse. If fail (no up?), eliminate".
-                        // If no up, eliminate does nothing.
-                        // Maybe it means "Eliminate Turn Effects"? No "Capability Elevation" usually means Stats.
-                        // So if they have no stats, we do nothing?
-                        // Text: "反转对手能力提升状态，反转成功则自身附加相同的能力提升，反转失败则消除对手能力提升状态"
-                        // This logic implies if we CAN'T reverse, we Dispel.
-                        // But if we can't reverse, it means there are no stats to reverse. So Dispel is redundant?
-                        // UNLESS "Reverse" has a chance? Or "Reverse" applies to specific things?
-                        // Usually in Seer, "Reverse" works on positive stats.
-                        // If they have no positive stats, Reverse fails.
-                        // Then "Dispel" happens. But Dispel removes positive stats.
-                        // So if they have no positive stats, Dispel also does nothing.
-                        // This might be a catch-all or I'm missing a nuance.
-                        // Maybe it means "Eliminate Turns"? No.
-                        // I'll just implement: Reverse if possible. If not, call clearStats (which does nothing but safe).
-                        this.clearStats(this.enemy);
-                    }
-
-                    damage = await this.dealDamage(this.enemy, skill.power);
-                    if (damage < 300) {
-                        const fix = Math.floor(this.player.maxHp * 0.3);
-                        this.enemy.hp = Math.max(0, this.enemy.hp - fix);
-                        this.log(`伤害<300，附加 ${fix} 固伤！`);
-                        this.showDamageNumber(fix, false, 'pink');
-                    }
+                damage = await this.dealDamage(this.enemy, skill.power);
+                if (damage < 300) {
+                    const fix = Math.floor(this.player.maxHp * 0.3);
+                    this.enemy.hp = Math.max(0, this.enemy.hp - fix);
+                    this.log(`伤害<300，附加 ${fix} 固伤！`);
+                    this.showDamageNumber(fix, false, 'pink');
                 }
             }
         }
@@ -1361,8 +1263,13 @@ class Game {
 
             effect.turns--;
             if (effect.turns <= 0) {
-                char.buffs.turnEffects.splice(i, 1);
                 this.log(`${char.name} 的 ${effect.name} 效果结束了。`);
+                this.showFloatingText(`${effect.name} 结束`, char === this.player, '#aaa');
+
+                // Clear Stacks if needed
+                if (effect.id === 'water_curse') char.buffs.waterCurseStack = 0;
+
+                char.buffs.turnEffects.splice(i, 1);
 
                 // Bind End Effect
                 if (effect.id === 'bind') {
@@ -1411,6 +1318,7 @@ class Game {
         // Check immunity
         if ((target.buffs.immuneAbnormal > 0 || target.buffs.immuneAbnormalCount > 0) && ['poison', 'sleep', 'paralyze', 'burn', 'freeze', 'fear'].includes(id)) {
             this.log(`${target.name} 免疫了异常状态！`);
+            this.showFloatingText("免疫异常", target === this.player);
             if (target.buffs.immuneAbnormalCount > 0) {
                 target.buffs.immuneAbnormalCount--;
                 this.updateUI();
