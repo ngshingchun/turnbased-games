@@ -1,0 +1,163 @@
+.avatar-box-frame{
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform:scale(2)!important;
+	-ms-transform:scale(2)!important; /* IE 9 */
+	-moz-transform:scale(2)!important; /* Firefox */
+	-webkit-transform:scale(2)!important; /* Safari 和 Chrome */
+	-o-transform:scale(2)!important; /* Opera */
+}
+#avatarForm {
+	display: inline-block;
+}
+.comment-avatar {
+	overflow: inherit;
+	position: relative;
+}
+.comment-avatar>img:nth-child(1) {
+	border-radius: 50%;
+}
+.tag-box > span {
+	padding: 1px 4px;
+	color: #fff;
+	border-radius: 4px;
+	margin-top: 2px;
+	margin-left: 6px;
+	font-weight: bold;
+	font-size: 12px;
+}
+.tag-box {
+	margin-left: 8px;
+	display: flex;
+	flex-wrap: wrap;
+}
+
+.comment-replybox>.comment-avatar{
+	display: block;
+}
+#avatarSet {
+	position: absolute;
+	cursor: pointer;
+	top: 42px;
+}
+.comments-title {
+	margin-left: 30px;
+}
+#flowthread {
+	position: relative;
+}
+.comment-replybox {
+	position: relative;
+}
+.avatar-box {
+	max-width: 90vw;
+	width: 500px;
+	position: absolute;
+	top: 70px;
+	z-index: 100;
+	background: #fff;
+	border: 1px solid #000;
+	border-radius: 8px;
+	padding: 10px;
+	overflow: hidden;
+}
+.avatar-box button, .avatar-box label{
+	cursor: pointer;
+}
+.avatar-img-box {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.avatar-explain{
+	border-top: 1px solid #e5e5e5;
+	padding-top: 4px;
+}
+.avatar-img-box > div {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 4px;
+	margin-right: 4px;
+	border: 1px solid #ababab;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.avatar-img-box img {
+	width: 80px;
+	height: 80px;
+}
+.avatar-on {
+	box-shadow: 0 0 4px #8d8d8d;
+}
+.avatar-on::before {
+	content: "";
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	background-image: url(data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+IDwhLS0gQ3JlYXRlZCB3aXRoIFZlY3Rvcm5hdG9yIGZvciBpT1MgKGh0dHA6Ly92ZWN0b3JuYXRvci5pby8pIC0tPjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+CjxzdmcgaGVpZ2h0PSIxMDAlIiBzdHlsZT0iZmlsbC1ydWxlOm5vbnplcm87Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kOyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgd2lkdGg9IjEwMCUiIHhtbG5zOnZlY3Rvcm5hdG9yPSJodHRwOi8vdmVjdG9ybmF0b3IuaW8iIHZlcnNpb249IjEuMSIgdmlld0JveD0iMCAwIDMwMAkzMDAiPgo8ZGVmcy8+CjxnIGlkPSLlm77lsYIgMSIgdmVjdG9ybmF0b3I6bGF5ZXJOYW1lPSLlm77lsYIgMSI+CjxwYXRoIGQ9Ik0tMC42MTI5NzYrMzAwLjI5MkwyOTkuNzY4LTAuMDg5NTYxN0wtMC42MTI5NzYrMC4zMTg1NjVMLTAuNjEyOTc2KzMwMC4yOTJaIiBvcGFjaXR5PSIxIiBmaWxsPSIjMWVlNTcxIi8+CjxwYXRoIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyMi41MTU4IiBkPSJNMzYuMzA2Nis5My42OTM4TDgwLjczNTkrMTQxLjAxOUwxODAuNjYyKzM0LjUyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIG9wYWNpdHk9IjEiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiLz4KPC9nPgo8L3N2Zz4K);
+	width: 30px;
+	height: 30px;
+	background-size: cover;
+	opacity: 0.8;
+}
+.avatar-show {
+	position: absolute;
+	top: 10px;
+	font-size: 18px;
+	font-weight: bold;
+	padding: 10px 40px;
+	border-radius: 10px;
+	background-color: #fff;
+	box-shadow: 2px 2px 14px -2px #bbbbbb;
+	display: flex;
+	align-items: center;
+	z-index: 99;
+}
+.avatar-shade {
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	background: #000;
+	top: 0;
+	left: 0;
+	opacity: 0.5;
+	z-index: 20;
+}
+.comment-replybox{
+    padding: 16px;
+}
+@keyframes avatar-frame-spin {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+.avatar-frame-shade {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background-color: #00000094;
+	z-index: 99999;
+	display: flex;
+	flex-wrap: wrap;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+}
+.loading-spinner {
+	border: 10px solid rgba(196, 188, 136, 0.3);
+	border-top: 10px solid #ffffff;
+	border-radius: 50%;
+	width: 100px;
+	height: 100px;
+	animation: avatar-frame-spin 1s linear infinite;
+}

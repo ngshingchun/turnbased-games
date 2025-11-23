@@ -528,8 +528,8 @@ body {
     /* Deep Sky Blue */
     border: 1px solid #fff;
     box-shadow: 0 0 3px #00bfff;
-    font-size: 0;
-    /* Hide text inside dot */
+    font-size: 11px;
+    font-weight: bold;
 }
 
 /* Count-based Effects (Red Dots) */
@@ -541,8 +541,16 @@ body {
     /* Solid Red */
     border: 1px solid #fff;
     box-shadow: 0 0 3px #ff0000;
-    font-size: 0;
-    /* Hide text inside dot */
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.buff-icon.turn-effect span,
+.buff-icon.count-effect span {
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
+    text-shadow: 0 0 2px #000;
 }
 
 /* Shield UI */
@@ -565,6 +573,18 @@ body {
     background-color: #333;
     border: 1px solid #fff;
     font-size: 10px;
+}
+
+.buff-icon.stat.stat-up {
+    background-color: #f1c40f;
+    border-color: #f1c40f;
+    color: #2c3e50;
+}
+
+.buff-icon.stat.stat-down {
+    background-color: #8e44ad;
+    border-color: #c39bd3;
+    color: #fff;
 }
 
 .buff-icon.up {

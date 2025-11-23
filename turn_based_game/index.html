@@ -56,7 +56,13 @@
                     </div>
                 </div>
                 <div class="avatar-frame enemy">
+                    <img src="" alt="Enemy" class="avatar" id="enemy-avatar" style="display: none;">
                     <div class="avatar-placeholder"></div>
+                    <!-- Enemy Soul Mark Icon -->
+                    <div class="soul-mark" id="enemy-soul-mark" onmouseenter="game.showTooltip(event, 'enemy-soul-mark')"
+                        onmouseleave="game.hideTooltip()">
+                        魂
+                    </div>
                 </div>
             </div>
         </div>
@@ -173,6 +179,7 @@
             </div>
         </div>
     </div>
+    <script src="skill_effects.js"></script>
     <script src="game.js"></script>
 </body>
 
