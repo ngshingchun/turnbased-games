@@ -1,0 +1,689 @@
+/* Global Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #2c3e50;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+}
+
+.game-container {
+    width: 800px;
+    height: 600px;
+    background-color: #34495e;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* HUD */
+.hud {
+    height: 100px;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    position: relative;
+    z-index: 10;
+}
+
+.player-status,
+.enemy-status {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    width: 40%;
+}
+
+.enemy-status {
+    flex-direction: row-reverse;
+}
+
+.avatar-frame {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    overflow: visible;
+    /* Allow soul mark to pop out */
+    background: #000;
+}
+
+.avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    background: #555;
+    border-radius: 50%;
+}
+
+.soul-mark {
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    width: 24px;
+    height: 24px;
+    background: gold;
+    color: black;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 12px;
+    border: 2px solid #fff;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    cursor: help;
+    z-index: 20;
+}
+
+.bars {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name-tag {
+    font-weight: bold;
+    font-size: 16px;
+    text-shadow: 1px 1px 2px black;
+}
+
+.pokemon-count {
+    display: flex;
+    gap: 2px;
+    height: 10px;
+}
+
+.pokeball {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #555;
+}
+
+.pokeball.active {
+    background: #e74c3c;
+}
+
+.pokeball.enemy.active {
+    background: #3498db;
+}
+
+.hp-bar-container {
+    width: 100%;
+    height: 16px;
+    background: #555;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid #222;
+}
+
+.hp-bar {
+    height: 100%;
+    background: #2ecc71;
+    width: 100%;
+    transition: width 0.5s ease-out;
+}
+
+.hp-bar.enemy {
+    background: #e74c3c;
+}
+
+.hp-text {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    line-height: 16px;
+    text-shadow: 1px 1px 1px black;
+    white-space: nowrap;
+}
+
+.buffs,
+.turn-effects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 20px;
+}
+
+.vs-badge {
+    font-size: 32px;
+    font-weight: bold;
+    font-style: italic;
+    color: #f1c40f;
+    text-shadow: 2px 2px 0 #c0392b;
+}
+
+/* Battle Scene */
+.battle-scene {
+    flex: 1;
+    background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 100%);
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 50px 40px 50px;
+    overflow: hidden;
+}
+
+.character-container {
+    width: 200px;
+    height: 200px;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+.character-sprite,
+.enemy-sprite {
+    width: 100%;
+    height: 100%;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    transition: transform 0.3s;
+}
+
+#player-sprite {
+    transform: scaleX(-1);
+    /* Face right */
+}
+
+.enemy-sprite {
+    /* Background image set via JS */
+}
+
+/* Bottom Panel */
+.bottom-panel {
+    height: 220px;
+    background: #2c3e50;
+    border-top: 4px solid #34495e;
+    display: flex;
+    padding: 10px;
+    gap: 10px;
+}
+
+.skills-left-container {
+    width: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.skills-grid-container {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+}
+
+.right-panel-group {
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.battle-log-container {
+    flex: 1;
+    background: #000;
+    border-radius: 5px;
+    padding: 5px;
+    overflow: hidden;
+    border: 1px solid #555;
+}
+
+.battle-log {
+    height: 100%;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    color: #0f0;
+}
+
+.actions-panel {
+    height: 40px;
+    display: flex;
+    gap: 5px;
+}
+
+.action-btn {
+    flex: 1;
+    background: #e67e22;
+    border: none;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.action-btn:hover {
+    background: #d35400;
+}
+
+/* Skill Buttons */
+.skill-btn {
+    background: #3498db;
+    border: none;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 5px 10px;
+    gap: 10px;
+    transition: background 0.2s, transform 0.1s;
+    position: relative;
+}
+
+.skill-btn:hover {
+    background: #2980b9;
+}
+
+.skill-btn:active {
+    transform: translateY(2px);
+}
+
+.skill-btn.ult {
+    height: 100%;
+    background: linear-gradient(135deg, #8e44ad, #9b59b6);
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+}
+
+.skill-btn.ult:hover {
+    background: linear-gradient(135deg, #732d91, #8e44ad);
+}
+
+.skill-icon {
+    font-size: 20px;
+}
+
+.skill-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.skill-btn.ult .skill-info {
+    align-items: center;
+}
+
+.skill-name {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+.skill-power,
+.skill-pp {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* Animations */
+@keyframes shake {
+    0% {
+        transform: translate(1px, 1px) rotate(0deg);
+    }
+
+    10% {
+        transform: translate(-1px, -2px) rotate(-1deg);
+    }
+
+    20% {
+        transform: translate(-3px, 0px) rotate(1deg);
+    }
+
+    30% {
+        transform: translate(3px, 2px) rotate(0deg);
+    }
+
+    40% {
+        transform: translate(1px, -1px) rotate(1deg);
+    }
+
+    50% {
+        transform: translate(-1px, 2px) rotate(-1deg);
+    }
+
+    60% {
+        transform: translate(-3px, 1px) rotate(0deg);
+    }
+
+    70% {
+        transform: translate(3px, 1px) rotate(-1deg);
+    }
+
+    80% {
+        transform: translate(-1px, -1px) rotate(1deg);
+    }
+
+    90% {
+        transform: translate(1px, 2px) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(1px, -2px) rotate(-1deg);
+    }
+}
+
+.shake {
+    animation: shake 0.5s;
+}
+
+.attack-lunge {
+    transform: translateX(50px);
+    transition: transform 0.2s;
+}
+
+#player-sprite.attack-lunge {
+    transform: scaleX(-1) translateX(-50px);
+}
+
+/* Damage Numbers */
+.damage-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.damage-number {
+    position: absolute;
+    font-size: 32px;
+    font-weight: bold;
+    color: #e74c3c;
+    text-shadow: 2px 2px 0 #000;
+    animation: floatUp 1s forwards;
+}
+
+.damage-number.heal {
+    color: #2ecc71;
+}
+
+.damage-number.pink {
+    color: #ff69b4;
+}
+
+@keyframes floatUp {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    z-index: 1000;
+    max-width: 200px;
+    pointer-events: none;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Status Container */
+.status-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+}
+
+.control-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 32px;
+    /* Larger for control icons */
+}
+
+.buff-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 16px;
+    /* Smaller for dots */
+    align-items: center;
+}
+
+.stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 20px;
+}
+
+/* Buff Icons */
+.buff-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+    color: #fff;
+    position: relative;
+    cursor: help;
+    background-size: cover;
+    background-position: center;
+}
+
+/* Control Effects (Large Icons) */
+.buff-icon.control {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: 1px solid #fff;
+    background-color: #2c3e50;
+    /* Fallback */
+    font-size: 10px;
+    text-align: center;
+    line-height: 10px;
+}
+
+/* Turn-based Effects (Blue Dots) */
+.buff-icon.turn-effect {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #00bfff;
+    /* Deep Sky Blue */
+    border: 1px solid #fff;
+    box-shadow: 0 0 3px #00bfff;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Count-based Effects (Red Dots) */
+.buff-icon.count-effect {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #ff0000;
+    /* Solid Red */
+    border: 1px solid #fff;
+    box-shadow: 0 0 3px #ff0000;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.buff-icon.turn-effect span,
+.buff-icon.count-effect span {
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
+    text-shadow: 0 0 2px #000;
+}
+
+/* Shield UI */
+.buff-icon.shield {
+    width: 16px;
+    height: 18px;
+    background-color: #f1c40f;
+    border: 1px solid #fff;
+    border-radius: 0 0 50% 50%;
+    /* Shield shape approximation */
+    box-shadow: 0 0 3px #f1c40f;
+    font-size: 0;
+}
+
+/* Stats */
+.buff-icon.stat {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #333;
+    border: 1px solid #fff;
+    font-size: 10px;
+}
+
+.buff-icon.stat.stat-up {
+    background-color: #f1c40f;
+    border-color: #f1c40f;
+    color: #2c3e50;
+}
+
+.buff-icon.stat.stat-down {
+    background-color: #8e44ad;
+    border-color: #c39bd3;
+    color: #fff;
+}
+
+.buff-icon.up {
+    border-color: #2ecc71;
+    color: #2ecc71;
+}
+
+.buff-icon.down {
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+/* Floating Text */
+.floating-text {
+    position: absolute;
+    font-weight: bold;
+    font-size: 14px;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+    animation: floatUpFade 1.5s forwards;
+    z-index: 1000;
+    white-space: nowrap;
+}
+
+@keyframes floatUpFade {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+}
+
+/* Modals */
+.modal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+}
+
+.modal-content {
+    background: #2c3e50;
+    padding: 20px;
+    border-radius: 10px;
+    width: 300px;
+    max-height: 80%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.item-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: #34495e;
+    border: none;
+    color: white;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+.item-btn:hover {
+    background: #2980b9;
+}
+
+.item-btn.active {
+    background: #27ae60;
+}
+
+.close-btn {
+    background: #c0392b;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.skill-blocked {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #7f8c8d !important;
+}

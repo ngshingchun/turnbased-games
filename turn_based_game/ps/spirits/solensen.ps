@@ -1,0 +1,7 @@
+混沌魔君索伦森 Phase Script
+----------------------------
+- OPEN_TURN: 重置魂印字段。
+- ENTRY: 若对手有强化 -> 清除 + 2回合封强 + 1次封属。
+- TURN_START: 同步对手能力等级；自身无强化则本回合伤害减半且50%免疫攻击。
+- TURN_END: 若自身有强化 -> 恢复1/3最大体力并对手等量固伤。
+- 使用到的效果代码留在 skill_effects.js / game helpers，phase 只挂钩 timeline。
