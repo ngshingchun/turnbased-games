@@ -1,254 +1,408 @@
+/**
+ * 王·雷伊 (King Ray) - 精灵定义
+ * 魂印: 雷
+ * 
+ * 使用新架构: SYSTEM.SUBFUNC(nodes, handler)
+ * 所有技能包含 PP.USE 调用
+ */
 (() => {
-    const key = 'kingRay';
-    const data = {
-        key,
-        name: "王·雷伊",
-        asset: "assets/king_ray.png",
-        maxHp: 800,
-        soulMark: "雷",
-        soulMarkDesc: "【魂印】雷\n每回合开始和结束时吸取对手能力提升状态；\n回合开始时对手所有回合类效果的回合数变为1回合；\n回合开始时若自身体力高于对手则战斗阶段结束时自身攻击+2，回合开始时若自身体力低于对手，则当回合自身回合类效果无法被消除（BOSS无效）",
-        resist: { fixed: 0, percent: 0, trueDmg: 0 },
+    const NODE = window.TurnPhaseNode;
 
-        /**
-         * 魂印效果列表 (Point Form)
-         */
-        soulEffects: [
-            // === 吸取强化 ===
+    // =========================================================================
+    // 精灵基础数据
+    // =========================================================================
+    const SPIRIT = {
+        key: 'kingRay',
+        name: '王·雷伊',
+        element: '电',
+        maxHp: 800,
+        maxPp: 100,
+        attack: 130,
+        defense: 90,
+        spAttack: 100,
+        spDefense: 90,
+        speed: 140,
+        resist: { fixed: 0, percent: 0, trueDmg: 0 }
+    };
+
+    // =========================================================================
+    // 魂印定义
+    // =========================================================================
+    /**
+     * 【魂印】雷
+     * 每回合开始和结束时吸取对手能力提升状态
+     * 回合开始时对手所有回合效果回合数变为1（BOSS无效）
+     * 体力>对手时战斗阶段结束攻击+2，体力<对手时回合效果无法被消除（BOSS无效）
+     */
+    const SOULBUFF = {
+        name: '雷',
+        desc: '【魂印】雷\n每回合开始和结束时吸取对手能力提升状态\n回合开始时对手所有回合效果回合数变为1（BOSS无效）\n体力>对手时攻击+2，体力<对手时回合效果保护（BOSS无效）',
+        
+        effects: [
+            // ─────────────────────────────────────────────────────────────────
+            // 回合开始吸取强化
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'ray_steal_start',
                 name: '雷霆吸取',
-                desc: '回合开始时吸取对手能力提升状态',
-                phase: 'ON_TURN_START',
-                route: 'StatEffect.steal',
-                owner: 'self'
+                trigger: NODE.TURN_START,
+                condition: (ctx) => ctx.self.key === 'kingRay',
+                calls: [
+                    // STATS.STEAL - 吸取对手能力提升
+                    { system: 'STATS', func: 'STEAL', from: 'opponent', to: 'self' }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 回合结束吸取强化
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'ray_steal_end',
                 name: '雷霆吸取',
-                desc: '回合结束时吸取对手能力提升状态',
-                phase: 'ON_TURN_END',
-                route: 'StatEffect.steal',
-                owner: 'self'
+                trigger: NODE.TURN_END,
+                condition: (ctx) => ctx.self.key === 'kingRay',
+                calls: [
+                    // STATS.STEAL - 吸取对手能力提升
+                    { system: 'STATS', func: 'STEAL', from: 'opponent', to: 'self' }
+                ]
             },
-            // === 回合效果压制 ===
+
+            // ─────────────────────────────────────────────────────────────────
+            // 回合效果压制
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'ray_turn_suppress',
                 name: '雷霆压制',
-                desc: '回合开始时对手所有回合效果回合数变为1',
-                phase: 'ON_TURN_START',
-                route: 'TurnEffect.suppress',
-                owner: 'opponent',
-                bossInvalid: true
+                trigger: NODE.TURN_START,
+                condition: (ctx) => ctx.self.key === 'kingRay' && !ctx.opponent?.flags?.isBoss,
+                calls: [
+                    // TURN.SUPPRESS - 对手回合效果回合数变为1
+                    { system: 'TURN', func: 'SUPPRESS', target: 'opponent', maxTurns: 1 }
+                ]
             },
-            // === 体力判定效果 ===
+
+            // ─────────────────────────────────────────────────────────────────
+            // 体力高于对手时攻击+2
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'ray_dominance_attack',
                 name: '雷王威势',
-                desc: '体力>对手时，战斗阶段结束自身攻击+2',
-                phase: 'ON_TURN_START',
-                condition: 'hp > opponent.hp',
-                route: 'TurnEffect',
-                effectId: 'ray_attack_boost',
-                owner: 'self',
-                bossInvalid: true
+                trigger: NODE.BATTLE_PHASE_END,
+                condition: (ctx) => ctx.self.key === 'kingRay' && ctx.self.hp > ctx.opponent.hp && !ctx.opponent?.flags?.isBoss,
+                calls: [
+                    // STATS.MODIFY - 攻击+2
+                    { system: 'STATS', func: 'MODIFY', target: 'self', stats: { atk: 2 } }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 体力低于对手时回合效果保护
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'ray_fortitude_protect',
                 name: '雷王守护',
-                desc: '体力<对手时，当回合回合效果无法被消除',
-                phase: 'ON_TURN_START',
-                condition: 'hp < opponent.hp',
-                route: 'TurnEffect',
-                effectId: 'ray_protect',
-                owner: 'self',
-                bossInvalid: true
-            }
-        ],
-
-        skills: [
-            {
-                name: "王·万霆朝宗", type: "ultimate", power: 160, pp: 5, maxPp: 5,
-                desc: "第五技能\n攻击时造成的伤害不会出现微弱（克制关系为微弱时都变成普通）；\n消除对手回合类效果，消除成功则下回合自身造成的攻击伤害额外提升100%；\n未击败对手则自身全属性+1；\n未击败对手则下回合自身所有技能先制+2",
-                priority: 0,
-                ignoreWeaken: true,
-                effects: [
-                    { id: 760, args: [], note: "无视微弱", route: "DamageEffect.noWeak" },
-                    { id: 913, args: [], note: "消除回合效果成功则下回合伤害+100%", route: "TurnEffect.clear+DamageEffect", owner: "self" },
-                    { id: 983, args: [], note: "未击败则全属性+1", route: "StatEffect", condition: "!ko" },
-                    { id: 984, args: [2], note: "未击败则下回合先制+2", route: "TurnEffect+PriorityEffect", condition: "!ko", owner: "self" }
-                ]
-            },
-            {
-                name: "传承王意", type: "buff", power: 0, pp: 5, maxPp: 5,
-                desc: "属性攻击\n全属性+1，若自身当前体力低于对手则强化效果翻倍；\n2回合内每回合使用技能恢复自身最大体力的1/1；\n5回合内免疫并反弹所有受到的异常状态",
-                priority: 0,
-                effects: [
-                    { id: 946, args: [], note: "全属性+1(低血翻倍)", route: "StatEffect" },
-                    { id: 57, args: [2], note: "2回合每回合使用技能满血恢复", route: "TurnEffect+HealEffect", owner: "self" },
-                    { id: 191, args: [5], note: "5回合免疫反弹异常", route: "TurnEffect", owner: "self" }
-                ]
-            },
-            {
-                name: "万鸣齐闪", type: "buff", power: 0, pp: 5, maxPp: 5,
-                desc: "属性攻击\n反转自身能力下降状态；\n直接造成260点电系伤害，自身每处于一种能力提升状态则造成的伤害提高10%",
-                priority: 0,
-                effects: [
-                    { id: 521, args: [], note: "反转自身能力下降", route: "StatEffect.invert" },
-                    { id: 981, args: [260, 10], note: "260固伤+每项强化+10%", route: "DamageEffect.fixed" }
-                ]
-            },
-            {
-                name: "金翼剑轮", type: "attack", power: 130, pp: 5, maxPp: 5,
-                desc: "物理攻击\n免疫下1次受到的攻击",
-                priority: 0,
-                effects: [
-                    { id: 570, args: [1], note: "免疫下1次攻击", route: "CountEffect+BlockEffect.attackImmunity", owner: "self" }
-                ]
-            },
-            {
-                name: "雷裂残阳", type: "attack", power: 85, pp: 20, maxPp: 20,
-                desc: "物理攻击 先制+3\n先出手时对手当回合属性技能无效；\n若自身处于能力提升状态则造成的攻击伤害额外提升50%；\n给对手造成伤害时，伤害数值的100%恢复自身体力",
-                priority: 3,
-                effects: [
-                    { id: 980, args: [], note: "先出手则对手属性技能无效", route: "BlockEffect.attribute", condition: "movedFirst", owner: "opponent" },
-                    { id: 842, args: [50], note: "有强化时伤害+50%", route: "DamageEffect", condition: "hasStatUps" },
-                    { id: 101, args: [100], note: "伤害100%吸血", route: "HealEffect.drain" }
+                trigger: NODE.TURN_START,
+                condition: (ctx) => ctx.self.key === 'kingRay' && ctx.self.hp < ctx.opponent.hp && !ctx.opponent?.flags?.isBoss,
+                calls: [
+                    // TURN.ADD - 当回合回合效果无法被消除
+                    { system: 'TURN', func: 'ADD', target: 'self', effectId: 'turn_protect', turns: 1, flags: { protectTurnEffects: true } }
                 ]
             }
         ]
     };
 
-    /**
-     * 检查是否有能力提升
-     */
-    function hasStatUps(char) {
-        if (!char.buffs.statUps) return false;
-        return Object.values(char.buffs.statUps).some(v => v > 0);
-    }
+    // =========================================================================
+    // 技能定义
+    // =========================================================================
+    const SKILLS = [
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能1: 王·万霆朝宗 (第五技能)
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'ray_skill_1',
+            name: '王·万霆朝宗',
+            type: 'ultimate',
+            element: '电',
+            category: 'physical',
+            power: 160,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 'must_hit',
+            flags: { ignoreWeaken: true },
+            desc: '第五技能\n无视微弱；消除对手回合效果，成功则下回合伤害+100%\n未击败则全属性+1、下回合先制+2',
+            
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 0,
+                    amount: 1
+                },
+                // TURN.DISPEL - 消除对手回合效果
+                {
+                    system: 'TURN',
+                    func: 'DISPEL',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    onSuccess: [
+                        // TURN.ADD - 下回合伤害+100%
+                        { system: 'TURN', func: 'ADD', target: 'self', effectId: 'damage_boost', turns: 1, flags: { damageBoost: 100 } }
+                    ]
+                },
+                // DAMAGE.ATTACK - 造成伤害
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: 160,
+                    flags: { ignoreWeaken: true }
+                },
+                // 条件: 未击败
+                {
+                    system: 'BRANCH',
+                    node: NODE.AFTER_ATTACK,
+                    condition: (ctx) => ctx.opponent.hp > 0,
+                    onTrue: [
+                        // STATS.MODIFY - 全属性+1
+                        { system: 'STATS', func: 'MODIFY', target: 'self', stats: { atk: 1, def: 1, spAtk: 1, spDef: 1, speed: 1 } },
+                        // PRIO.ADD - 下回合先制+2
+                        { system: 'PRIO', func: 'ADD', target: 'self', value: 2, turns: 1 }
+                    ]
+                }
+            ]
+        },
 
-    /**
-     * 吸取对手能力提升
-     */
-    function stealStats(g, self, opponent) {
-        if (!opponent.buffs.statUps) return false;
-        
-        let stolen = false;
-        const stats = ['atk', 'def', 'spa', 'spd', 'spe'];
-        
-        for (const stat of stats) {
-            const val = opponent.buffs.statUps[stat] || 0;
-            if (val > 0) {
-                self.buffs.statUps = self.buffs.statUps || {};
-                self.buffs.statUps[stat] = (self.buffs.statUps[stat] || 0) + val;
-                opponent.buffs.statUps[stat] = 0;
-                stolen = true;
-            }
-        }
-        
-        return stolen;
-    }
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能2: 传承王意
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'ray_skill_2',
+            name: '传承王意',
+            type: 'buff',
+            element: '电',
+            category: 'attribute',
+            power: 0,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 'must_hit',
+            desc: '属性攻击\n全属性+1（低血翻倍）；\n2回合每回合使用技能满血恢复；\n5回合免疫反弹异常',
+            
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 1,
+                    amount: 1
+                },
+                // STATS.MODIFY - 全属性+1 (低血翻倍)
+                {
+                    system: 'STATS',
+                    func: 'MODIFY',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    stats: { atk: 1, def: 1, spAtk: 1, spDef: 1, speed: 1 },
+                    modifier: (ctx) => ctx.self.hp < ctx.opponent.hp ? 2 : 1
+                },
+                // TURN.ADD - 2回合使用技能满血恢复
+                {
+                    system: 'TURN',
+                    func: 'ADD',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    effectId: 'skill_heal',
+                    turns: 2,
+                    onSkillUse: [
+                        { system: 'HP', func: 'HEAL_FULL', target: 'self' }
+                    ]
+                },
+                // TURN.ADD - 5回合免疫反弹异常
+                {
+                    system: 'TURN',
+                    func: 'ADD',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    effectId: 'status_reflect',
+                    turns: 5,
+                    flags: { immuneStatus: true, reflectStatus: true }
+                }
+            ]
+        },
 
-    /**
-     * 注册 TurnPhase 处理器
-     */
-    function registerPhases(timeline, game) {
-        // === ENTRY: 登场 ===
-        timeline.on(TurnPhases.ENTRY, (g, { actor }) => {
-            if (!actor || actor.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能3: 万鸣齐闪
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'ray_skill_3',
+            name: '万鸣齐闪',
+            type: 'buff',
+            element: '电',
+            category: 'attribute',
+            power: 0,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 'must_hit',
+            desc: '属性攻击\n反转自身能力下降；\n造成260点电系伤害，每项强化+10%',
             
-            // 初始化状态
-            actor.buffs.rayAttackBoostTrigger = false;
-            actor.buffs.rayProtectTurnEffects = false;
-        });
-
-        // === TURN_START: 回合开始 ===
-        timeline.on(TurnPhases.TURN_START, (g, { actor, opponent }) => {
-            if (!actor || actor.key !== key) return;
-            
-            // BOSS无效检查
-            const isBoss = opponent.meta?.isBoss;
-            
-            // [吸取] 回合开始吸取对手能力提升
-            if (stealStats(g, actor, opponent)) {
-                g.log(`【魂印·雷】回合开始吸取了对手的能力提升！`);
-                g.showFloatingText("雷霆吸取", actor === g.player);
-            }
-            
-            // [压制] 对手所有回合效果回合数变为1
-            if (!isBoss && opponent.buffs.turnEffects?.length > 0) {
-                let suppressed = false;
-                for (const e of opponent.buffs.turnEffects) {
-                    if (e.turns > 1) {
-                        e.turns = 1;
-                        suppressed = true;
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 2,
+                    amount: 1
+                },
+                // STATS.REVERSE - 反转自身能力下降
+                {
+                    system: 'STATS',
+                    func: 'REVERSE',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self'
+                },
+                // DAMAGE.FIXED - 260固伤 + 每项强化+10%
+                {
+                    system: 'DAMAGE',
+                    func: 'FIXED',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    value: (ctx) => {
+                        const statUps = Object.values(ctx.self.stages || {}).filter(v => v > 0).length;
+                        return Math.floor(260 * (1 + statUps * 0.1));
                     }
                 }
-                if (suppressed) {
-                    g.log(`【魂印·雷】雷霆压制！对手回合效果回合数压缩为1！`);
-                }
-            }
-            
-            // [体力判定]
-            if (!isBoss) {
-                if (actor.hp > opponent.hp) {
-                    // 体力高于对手：战斗阶段结束攻击+2
-                    actor.buffs.rayAttackBoostTrigger = true;
-                    g.log(`【魂印·雷】雷王威势！战斗阶段结束将攻击+2！`);
-                } else if (actor.hp < opponent.hp) {
-                    // 体力低于对手：当回合回合效果保护
-                    actor.buffs.rayProtectTurnEffects = true;
-                    g.log(`【魂印·雷】雷王守护！当回合回合效果无法被消除！`);
-                }
-            }
-        });
+            ]
+        },
 
-        // === BEFORE_CLEAR_TURN_EFFECTS: 消除回合效果前（保护判定） ===
-        timeline.on(TurnPhases.BEFORE_CLEAR_TURN_EFFECTS, (g, { target }) => {
-            if (!target || target.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能4: 金翼剑轮
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'ray_skill_4',
+            name: '金翼剑轮',
+            type: 'attack',
+            element: '电',
+            category: 'physical',
+            power: 130,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 100,
+            desc: '物理攻击\n免疫下1次攻击',
             
-            if (target.buffs.rayProtectTurnEffects) {
-                g.log(`【魂印·雷】雷王守护生效！回合效果无法被消除！`);
-                return { cancel: true };
-            }
-        });
-
-        // === TURN_END: 回合结束 ===
-        timeline.on(TurnPhases.TURN_END, (g, { actor, opponent }) => {
-            if (!actor || actor.key !== key) return;
-            
-            // [吸取] 回合结束吸取对手能力提升
-            if (stealStats(g, actor, opponent)) {
-                g.log(`【魂印·雷】回合结束吸取了对手的能力提升！`);
-            }
-            
-            // [攻击+2] 触发攻击加成
-            if (actor.buffs.rayAttackBoostTrigger) {
-                if (window.StatEffect?.modify) {
-                    window.StatEffect.modify(g, actor, 'atk', 2, '魂印·雷');
-                } else {
-                    actor.buffs.statUps = actor.buffs.statUps || {};
-                    actor.buffs.statUps.atk = (actor.buffs.statUps.atk || 0) + 2;
-                    g.log(`【魂印·雷】雷王威势发动！攻击+2！`);
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 3,
+                    amount: 1
+                },
+                // DAMAGE.ATTACK - 造成伤害
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: 130
+                },
+                // TEAM.COUNT - 免疫下1次攻击
+                {
+                    system: 'TEAM',
+                    func: 'COUNT',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    action: 'set',
+                    countId: 'attack_immune',
+                    value: 1,
+                    flags: { immuneType: 'attack' }
                 }
-                actor.buffs.rayAttackBoostTrigger = false;
-            }
-            
-            // 重置保护状态
-            actor.buffs.rayProtectTurnEffects = false;
-        });
+            ]
+        },
 
-        // === GET_ICONS: 获取状态图标 ===
-        timeline.on(TurnPhases.GET_ICONS, (g, { char, icons }) => {
-            if (char.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能5: 雷裂残阳
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'ray_skill_5',
+            name: '雷裂残阳',
+            type: 'attack',
+            element: '电',
+            category: 'physical',
+            power: 85,
+            pp: 20,
+            maxPp: 20,
+            priority: 3,
+            accuracy: 100,
+            desc: '物理攻击 先制+3\n先出手则对手属性技能无效；\n有强化时伤害+50%；\n100%吸血',
             
-            if (char.buffs.rayAttackBoostTrigger) {
-                icons.push({ val: '+2', type: 'soul-effect', desc: '魂印·雷: 雷王威势（战斗结束攻击+2）' });
-            }
-            if (char.buffs.rayProtectTurnEffects) {
-                icons.push({ val: '护', type: 'soul-effect', desc: '魂印·雷: 雷王守护（回合效果保护）' });
-            }
-        });
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 4,
+                    amount: 1
+                },
+                // 条件: 先出手则对手属性技能无效
+                {
+                    system: 'BRANCH',
+                    node: NODE.SKILL_EFFECT,
+                    condition: (ctx) => ctx.isFirstMover,
+                    onTrue: [
+                        // TURN.ADD - 当回合对手属性技能无效
+                        { system: 'TURN', func: 'ADD', target: 'opponent', effectId: 'block_attribute', turns: 1, flags: { blockAttribute: true } }
+                    ]
+                },
+                // DAMAGE.ATTACK - 造成伤害 (有强化+50%)
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: 85,
+                    modifier: (ctx) => ctx.self?.hasStatUp?.() ? 1.5 : 1
+                },
+                // HP.DRAIN - 100%吸血
+                {
+                    system: 'HP',
+                    func: 'DRAIN',
+                    node: NODE.AFTER_ATTACK,
+                    target: 'self',
+                    valueFrom: 'lastDamage',
+                    percent: 100
+                }
+            ]
+        }
+    ];
+
+    // =========================================================================
+    // 注册精灵
+    // =========================================================================
+    if (window.SOULBUFF?.REGISTER) {
+        window.SOULBUFF.REGISTER(SPIRIT.key, SOULBUFF);
     }
+    
+    window.SpiritRegistry = window.SpiritRegistry || {};
+    window.SpiritRegistry[SPIRIT.key] = {
+        ...SPIRIT,
+        soulbuff: SOULBUFF,
+        skills: SKILLS
+    };
 
-    registerSpirit(data, registerPhases);
+    console.log(`[Spirit] ${SPIRIT.name} loaded`);
 })();

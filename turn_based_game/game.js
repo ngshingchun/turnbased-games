@@ -1,20 +1,16 @@
 class Game {
     constructor() {
+        // --- Sync spirits from new system to legacy system ---
+        if (window.syncSpiritsToLegacy) {
+            window.syncSpiritsToLegacy();
+        }
+        
         // --- Character Data Definitions ---
         this.charData = this.buildCharDataFromRegistry();
+        this.damageSystem = new DamageSystem(this);
 
-        // --- Team Setup ---
-        // Randomize Teams (2v2)
-        const charKeys = Object.keys(this.charData);
-        // Fisher-Yates Shuffle
-        for (let i = charKeys.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [charKeys[i], charKeys[j]] = [charKeys[j], charKeys[i]];
-        }
-
-        const half = Math.floor(charKeys.length / 2);
-        this.playerTeam = charKeys.slice(0, half).map(key => JSON.parse(JSON.stringify(this.charData[key])));
-        this.enemyTeam = charKeys.slice(half, half * 2).map(key => JSON.parse(JSON.stringify(this.charData[key])));
+        this.playerTeam = [];
+        this.enemyTeam = [];
 
         this.activePlayerIndex = 0;
         this.activeEnemyIndex = 0;
@@ -22,9 +18,10 @@ class Game {
         this.isBusy = false;
         this.turnCount = 0;
         this.items = { pp_potion: 5, hp_potion: 3 };
-        this.playerHasStar = this.playerTeam.some(c => this.isStarSovereign(c));
-        this.enemyHasStar = this.enemyTeam.some(c => this.isStarSovereign(c));
+        this.playerHasStar = false;
+        this.enemyHasStar = false;
         this.starRageWindow = { active: false, attacker: null };
+        this.pendingP1Action = null; // For Multiplayer
 
         this.ui = {
             playerHpBar: document.getElementById('player-hp-bar'),
@@ -54,6 +51,22 @@ class Game {
         this.ui.itemCountPP = document.getElementById('item-count-pp');
         this.ui.itemCountHP = document.getElementById('item-count-hp');
         this.updateItemCounts();
+
+        // New UI Elements
+        this.ui.entryScreen = document.getElementById('entry-screen');
+        this.ui.selectionScreen = document.getElementById('selection-screen');
+        this.ui.gameContainer = document.getElementById('game-container');
+        this.ui.spiritPool = document.getElementById('spirit-pool');
+        this.ui.p1Slots = document.getElementById('p1-slots');
+        this.ui.p2Slots = document.getElementById('p2-slots');
+        this.ui.startBattleBtn = document.getElementById('start-battle-btn');
+        this.ui.p2Title = document.getElementById('p2-title');
+
+        this.gameMode = 'single'; // 'single' or 'multi'
+        this.selectedP1 = [];
+        this.selectedP2 = [];
+
+        this.showEntryScreen();
 
         this.EFFECT_DEFS = {
             'poison': { name: '中毒', desc: '每回合扣除1/8最大体力' },
@@ -107,10 +120,158 @@ class Game {
         this.SWITCH_BLOCK_STATUSES = ['bind', 'paralysis', 'stagnant'];
 
         // --- Phase Engine / Soul Mark hooks ---
+        // --- Phase Engine / Soul Mark hooks ---
         this.timeline = new PhaseEngine(this);
         this.registerSpiritPhases();
         // --- Damage routing ---
         this.damageSystem = new DamageSystem(this);
+
+        // this.initBattle(); // Removed auto-init
+    }
+
+    // --- Entry & Selection Logic ---
+
+    showEntryScreen() {
+        this.ui.entryScreen.classList.remove('hidden');
+        this.ui.selectionScreen.classList.add('hidden');
+        this.ui.gameContainer.classList.add('hidden');
+    }
+
+    showSpiritSelection(mode) {
+        this.gameMode = mode;
+        this.ui.entryScreen.classList.add('hidden');
+        this.ui.selectionScreen.classList.remove('hidden');
+
+        this.ui.p2Title.innerText = mode === 'single' ? "电脑 (自动填充)" : "玩家 2";
+
+        // Reset selections
+        this.selectedP1 = [];
+        this.selectedP2 = [];
+        this.ui.p1Slots.innerHTML = '';
+        this.ui.p2Slots.innerHTML = '';
+        this.ui.startBattleBtn.disabled = true;
+
+        this.renderSpiritPool();
+        this.renderTeamPreviews();
+    }
+
+    renderSpiritPool() {
+        this.ui.spiritPool.innerHTML = '';
+        const keys = Object.keys(this.charData);
+
+        keys.forEach(key => {
+            const char = this.charData[key];
+            const item = document.createElement('div');
+            item.className = 'pool-item';
+            item.innerHTML = `
+                <img src="${char.asset || 'assets/character.png'}" alt="${char.name}">
+                <span>${char.name}</span>
+            `;
+            item.onclick = () => this.addToTeam(key);
+            this.ui.spiritPool.appendChild(item);
+        });
+    }
+
+    addToTeam(key) {
+        const char = JSON.parse(JSON.stringify(this.charData[key]));
+
+        // Logic: Fill P1 (3), then P2 (3), then P1 (6), then P2 (6)
+        if (this.selectedP1.length < 3) {
+            this.selectedP1.push(char);
+        } else if (this.gameMode === 'multi' && this.selectedP2.length < 3) {
+            this.selectedP2.push(char);
+        } else if (this.selectedP1.length < 6) {
+            this.selectedP1.push(char);
+        } else if (this.gameMode === 'multi' && this.selectedP2.length < 6) {
+            this.selectedP2.push(char);
+        } else {
+            return; // Teams full
+        }
+        this.renderTeamPreviews();
+    }
+
+    removeFromTeam(index, isP1) {
+        if (isP1) {
+            this.selectedP1.splice(index, 1);
+        } else {
+            this.selectedP2.splice(index, 1);
+        }
+        this.renderTeamPreviews();
+    }
+
+    renderTeamPreviews() {
+        // Render P1
+        this.ui.p1Slots.innerHTML = '';
+        for (let i = 0; i < 6; i++) {
+            const char = this.selectedP1[i];
+            const slot = document.createElement('div');
+            slot.className = `slot ${char ? '' : 'empty'}`;
+            if (char) {
+                slot.innerHTML = `
+                    <img src="${char.asset || 'assets/character.png'}" style="width:24px;height:24px;margin-right:5px;">
+                    ${char.name}
+                    <span class="slot-remove" onclick="event.stopPropagation(); game.removeFromTeam(${i}, true)">✕</span>
+                `;
+            } else {
+                slot.innerText = "空位";
+            }
+            this.ui.p1Slots.appendChild(slot);
+        }
+
+        // Render P2
+        this.ui.p2Slots.innerHTML = '';
+        for (let i = 0; i < 6; i++) {
+            const char = this.selectedP2[i];
+            const slot = document.createElement('div');
+            slot.className = `slot ${char ? '' : 'empty'}`;
+            if (char) {
+                slot.innerHTML = `
+                    <img src="${char.asset || 'assets/character.png'}" style="width:24px;height:24px;margin-right:5px;">
+                    ${char.name}
+                    <span class="slot-remove" onclick="event.stopPropagation(); game.removeFromTeam(${i}, false)">✕</span>
+                `;
+            } else {
+                slot.innerText = this.gameMode === 'single' ? "随机" : "空位";
+            }
+            this.ui.p2Slots.appendChild(slot);
+        }
+
+        // Enable Start Button if P1 has at least 1
+        const p1Ready = this.selectedP1.length > 0;
+        const p2Ready = this.gameMode === 'single' || this.selectedP2.length > 0;
+        this.ui.startBattleBtn.disabled = !(p1Ready && p2Ready);
+    }
+
+    startGame() {
+        if (this.selectedP1.length === 0) return;
+        if (this.gameMode === 'multi' && this.selectedP2.length === 0) return;
+
+        // Setup Teams
+        this.playerTeam = this.selectedP1;
+
+        if (this.gameMode === 'single') {
+            // Auto-fill P2 with random spirits if empty or partial?
+            // Let's just fill up to 6 or match P1 count?
+            // Usually match P1 count or full team. Let's do full team (6) for challenge.
+            const keys = Object.keys(this.charData);
+            this.enemyTeam = [];
+            for (let i = 0; i < 6; i++) {
+                const key = keys[Math.floor(Math.random() * keys.length)];
+                this.enemyTeam.push(JSON.parse(JSON.stringify(this.charData[key])));
+            }
+        } else {
+            this.enemyTeam = this.selectedP2;
+        }
+
+        // Reset State
+        this.activePlayerIndex = 0;
+        this.activeEnemyIndex = 0;
+        this.playerHasStar = this.playerTeam.some(c => this.isStarSovereign(c));
+        this.enemyHasStar = this.enemyTeam.some(c => this.isStarSovereign(c));
+
+        // UI Transition
+        this.ui.selectionScreen.classList.add('hidden');
+        this.ui.gameContainer.classList.remove('hidden');
 
         this.initBattle();
     }
@@ -246,7 +407,7 @@ class Game {
         this.ui.log.innerHTML = ''; // Clear hardcoded log
         this.log("战斗开始！");
         this.turnCount = 1;
-        this.log(`--- 第 ${this.turnCount} 回合 ---`);
+        this.logTurnSeparator(this.turnCount);
     }
 
     handleEntryEffects(char, opponent) {
@@ -278,23 +439,7 @@ class Game {
         }
     }
 
-    handleAishalaDeath(aishala, opponent) {
-        // Clear turn effects and stat ups
-        const clearedTurn = this.clearTurnEffects(opponent);
-        let clearedStats = false;
-        for (let k in opponent.buffs.statUps) {
-            if (opponent.buffs.statUps[k] > 0) {
-                opponent.buffs.statUps[k] = 0;
-                clearedStats = true;
-            }
-        }
-        if (clearedStats) this.log("魂印触发！消除了对手的能力提升！");
 
-        if (clearedTurn || clearedStats) {
-            this.addStatus(opponent, 'sleep');
-            this.log("魂印触发！消除成功，令对手睡眠！");
-        }
-    }
 
     log(message) {
         const entry = document.createElement('div');
@@ -412,7 +557,9 @@ class Game {
         // Use ABNORMAL_STATUSES list
         char.buffs.turnEffects.forEach(effect => {
             if (this.ABNORMAL_STATUSES.includes(effect.id)) {
-                this.createBuffIcon(controlRow, effect.name, effect.turns, 'control', this.getEffectDescription(effect.id, effect));
+                // Map status to icon/color
+                const statusConfig = this.getStatusConfig(effect.id);
+                this.createBuffIcon(controlRow, statusConfig.icon, effect.turns, 'control', this.getEffectDescription(effect.id, effect), statusConfig.color);
             }
         });
 
@@ -475,58 +622,38 @@ class Game {
         return map[stat] || stat;
     }
 
-    createBuffIcon(container, label, val, type = null, desc = null) {
-        const icon = document.createElement('div');
+    createBuffIcon(container, text, count, className, tooltip, bgColor = null) {
+        const div = document.createElement('div');
+        div.className = `buff-icon ${className}`;
+        if (bgColor) div.style.backgroundColor = bgColor;
 
-        let baseClass = type;
-        let statKey = null;
-        if (type && type.startsWith('stat:')) {
-            statKey = type.split(':')[1];
-            baseClass = 'stat';
-        }
+        // If text is emoji, use it. If it's a number (count), show it.
+        // For control effects, text is the icon.
 
-        const classNames = ['buff-icon'];
-        if (statKey) {
-            classNames.push('stat');
-            classNames.push(val >= 0 ? 'stat-up' : 'stat-down');
-        } else if (baseClass) {
-            classNames.push(...baseClass.split(' '));
-        } else {
-            classNames.push(val > 0 ? 'up' : 'down');
-        }
-        icon.className = classNames.join(' ');
-
-        if (statKey) {
-            let symbol;
-            switch (statKey) {
-                case 'attack': symbol = '⚔️'; break;
-                case 'defense': symbol = '🛡️'; break;
-                case 'speed': symbol = '💨'; break;
-                case 'specialAttack': symbol = '🔮'; break;
-                case 'specialDefense': symbol = '🔰'; break;
-                case 'accuracy': symbol = '🎯'; break;
-                default: symbol = '★';
+        if (className === 'control') {
+            div.innerText = text; // Icon
+            // Add turns indicator if needed? Usually control is 1-2 turns.
+            // Let's add a small subscript for turns if > 1
+            if (count > 1) {
+                const sub = document.createElement('span');
+                sub.style.position = 'absolute';
+                sub.style.bottom = '0';
+                sub.style.right = '0';
+                sub.style.fontSize = '8px';
+                sub.style.color = 'white';
+                sub.innerText = count;
+                div.appendChild(sub);
             }
-            icon.innerText = `${symbol}${val > 0 ? '+' : ''}${val}`;
         } else {
-            // For dot effects, show the remaining count centered inside the icon
-            if (type && (type.includes('turn') || type.includes('count-effect'))) {
-                icon.innerHTML = `<span>${val}</span>`;
-            } else {
-                icon.innerText = `${label}${val}`;
-            }
+            // For others, text is usually empty string passed in, and we use count
+            const span = document.createElement('span');
+            span.innerText = count > 0 ? count : text;
+            div.appendChild(span);
         }
 
-        if (desc) {
-            icon.onmouseenter = (e) => {
-                // Use the centralized showTooltip method to ensure consistent positioning
-                let tooltipContent = desc;
-                this.showTooltip(e, tooltipContent);
-            };
-            icon.onmouseleave = () => this.hideTooltip();
-        }
-
-        container.appendChild(icon);
+        div.onmouseenter = (e) => this.showTooltip(e, tooltip);
+        div.onmouseleave = () => this.hideTooltip();
+        container.appendChild(div);
     }
 
     updateSkillButtons() {
@@ -537,8 +664,14 @@ class Game {
         grid.innerHTML = '';
         left.innerHTML = '';
 
+        // Determine active character for selection
+        let activeChar = this.player;
+        if (this.gameMode === 'multi' && this.pendingP1Action) {
+            activeChar = this.enemy;
+        }
+
         // Sort skills: 160 Power (Ultimate) first
-        const sortedSkills = [...this.player.skills].sort((a, b) => {
+        const sortedSkills = [...activeChar.skills].sort((a, b) => {
             if (a.power === 160) return -1;
             if (b.power === 160) return 1;
             return 0;
@@ -549,10 +682,10 @@ class Game {
             const isUlt = skill.type === 'ultimate' || skill.power === 160;
             btn.className = `skill-btn ${isUlt ? 'ult' : ''}`;
 
-            // Status indicators (do not disable; still allow click to consume PP and fail)
-            const attrSealed = this.player.buffs.turnEffects.some(e => e.id === 'block_attr');
-            const attackSealed = this.player.buffs.turnEffects.some(e => e.id === 'block_attack');
-            const silenced = this.player.buffs.turnEffects.some(e => e.id === 'silence');
+            // Status indicators
+            const attrSealed = activeChar.buffs.turnEffects.some(e => e.id === 'block_attr');
+            const attackSealed = activeChar.buffs.turnEffects.some(e => e.id === 'block_attack');
+            const silenced = activeChar.buffs.turnEffects.some(e => e.id === 'silence');
             const noPp = skill.pp <= 0;
             const blocked = (skill.type === 'buff' && attrSealed) ||
                 ((skill.type === 'attack' || skill.type === 'ultimate') && attackSealed) ||
@@ -567,7 +700,6 @@ class Game {
             if (skill.type === 'attack') icon = '⚔️';
             if (skill.type === 'buff') icon = '✨';
             if (isUlt) icon = '👑';
-            // Specific overrides
             if (skill.name.includes('盾') || skill.name.includes('守')) icon = '🛡️';
             if (skill.name.includes('雷')) icon = '⚡';
 
@@ -581,7 +713,7 @@ class Game {
             `;
 
             // Find original index for useSkill
-            const originalIndex = this.player.skills.indexOf(skill);
+            const originalIndex = activeChar.skills.indexOf(skill);
             btn.onclick = () => this.useSkill(originalIndex);
 
             // Tooltip
@@ -735,16 +867,47 @@ class Game {
             this.log(`${this.player.name} 目前无法切换！`);
             return;
         }
-        this.isBusy = true;
 
         const playerAction = { type: 'switch', index: index };
+        await this.submitAction(playerAction);
+    }
 
-        // Enemy AI
-        const enemyAction = this.getEnemyAction();
+    async submitAction(action) {
+        if (this.gameMode === 'single') {
+            this.isBusy = true;
+            const enemyAction = this.getEnemyAction();
+            await this.resolveTurn(action, enemyAction);
+        } else {
+            // Multi Mode
+            if (!this.pendingP1Action) {
+                // P1 Action
+                this.pendingP1Action = action;
+                this.log("玩家 1 已行动，请玩家 2 行动...");
+                this.updateSkillButtons(); // Will show P2 skills
+                // If P1 switched, close modal
+                if (action.type === 'switch') this.toggleSwitch();
+            } else {
+                // P2 Action
+                this.isBusy = true;
+                const p1Action = this.pendingP1Action;
+                this.pendingP1Action = null;
 
-        await this.resolveTurn(playerAction, enemyAction);
+                // Adapt P2 action
+                let p2Action = action;
+                if (p2Action.type === 'skill') {
+                    // P2 uses enemy skills
+                    p2Action = { type: 'skill', skill: this.enemy.skills[p2Action.index] };
+                }
 
-        this.toggleSwitch();
+                await this.resolveTurn(p1Action, p2Action);
+            }
+        }
+    }
+
+    async useSkill(skillIndex) {
+        if (this.isBusy) return;
+        const action = { type: 'skill', index: skillIndex };
+        await this.submitAction(action);
     }
 
     getEnemyAction() {
@@ -755,16 +918,6 @@ class Game {
         const skillIndex = this.enemy.skills.indexOf(skill);
 
         return { type: 'skill', index: skillIndex, skill: skill };
-    }
-
-    async useSkill(skillIndex) {
-        if (this.isBusy) return;
-        this.isBusy = true;
-
-        const playerAction = { type: 'skill', index: skillIndex };
-        const enemyAction = this.getEnemyAction();
-
-        await this.resolveTurn(playerAction, enemyAction);
     }
 
     async resolveTurn(playerAction, enemyAction) {
@@ -847,7 +1000,7 @@ class Game {
         const battleEnded = this.checkWinCondition();
         if (!battleEnded) {
             this.turnCount++;
-            this.log(`--- 第 ${this.turnCount} 回合 ---`);
+            this.logTurnSeparator(this.turnCount);
         }
         this.updateSkillButtons();
 
@@ -920,49 +1073,11 @@ class Game {
 
     // Helper to calculate total priority
     getPriority(char, skill) {
-        let p = 0;
-        const hasForcedPriority = char.buffs.priorityForceNext > 0;
-        // Skill Priority
-        if (skill.name === "天威力破" || skill.name === "秩序之助" || skill.name === "上善若水" || skill.name === "诸雄之主") p += 3;
-
-        // Buff Priority
-        if (char.buffs.priorityNext > 0) p += 2;
-
-        if (hasForcedPriority) {
-            p = Math.max(p, 100);
+        if (window.PriorityEffect) {
+            return window.PriorityEffect.calculate(this, char, skill);
         }
-
-        // Soul Mark Priority
-        // Surging Canglan (Shield)
-        if (char.name === "怒涛·沧岚" && char.buffs.shieldHp > 0) p += 1;
-
-        // Star Sovereign Star Rage priority buff
-        if (this.isStarSovereign(char) && char.buffs.starRagePriorityTurns > 0) p += 2;
-
-        // Agnes (Fortitude)
-        // if (char.name === "不灭·艾恩斯" && char.buffs.agnesState === 'fortitude') {
-        //    p += 2;
-        // }
-
-        // Rebirth Wings Priority
-        if (char.name === "重生之翼") {
-            if (char.buffs.godlyGloryEnergy >= 5) p += 1;
-            if (char.buffs.rebirthWingsResetPriority > 0) p += 3;
-        }
-
-        // Incalos Priority
-        if (char.name === "光之惩戒·英卡洛斯") {
-            p += 1;
-        }
-
-        if (char.buffs.turnEffects.some(e => e.id === 'bind')) {
-            return 0;
-        }
-        if (char.buffs.turnEffects.some(e => e.id === 'priority_down')) {
-            p -= 2;
-        }
-
-        return p;
+        // Fallback if module not loaded (should not happen)
+        return 0;
     }
 
     // Helper to get current stat value
@@ -1020,6 +1135,14 @@ class Game {
 
     async executeAction(attacker, defender, skill) {
         const isPlayer = attacker === this.player;
+
+        // 显示先制值（如果不为0）
+        const priority = this.getPriority(attacker, skill);
+        if (priority !== 0) {
+            const prioText = priority > 0 ? `先制+${priority}` : `先制${priority}`;
+            const prioColor = priority > 0 ? '#00bfff' : '#ff6b6b';
+            this.showFloatingText(prioText, isPlayer, prioColor);
+        }
 
         // 1. Check Control
         const controlEffect = attacker.buffs.turnEffects.find(e => this.CONTROL_STATUSES.includes(e.id));
@@ -1330,7 +1453,7 @@ class Game {
             // We can use a custom buff or just a flag.
             // Let's use `damageBoostNext` but it's usually guaranteed.
             // We need a "chance to boost" buff.
-            // Let's add `sagrossChanceBoost` to buffs? Or just use `damageBoostNext` with a special value/flag?
+            // Let's add `sagrossChanceBoost` to buffs? Or just a property.
             // I'll add a specific turn effect for this? Or just a property.
             // Let's use a turn effect 'sagross_power_chance'.
             this.addTurnEffect(char, '圣威', 2, 'sagross_power_chance', '攻击50%概率翻倍');
@@ -1412,7 +1535,7 @@ class Game {
                 opponent.hp = Math.max(0, opponent.hp - absorbAmt);
                 this.heal(char, absorbAmt, "无始源光");
                 this.log(`无始源光：吸取对手 ${absorbAmt} 体力！`);
-                this.showDamageNumber(absorbAmt, char === this.player, 'pink');
+                this.showDamageNumber(absorbAmt, char === this.player ? false : true, 'pink');
             }
             if (effect.id === 'stat_up_loop') {
                 this.modifyStats(char, { attack: 1, speed: 1 });
@@ -1902,9 +2025,6 @@ class Game {
             // But for now, I'll just add a generic crit check if I can.
             // Or just rely on `critNext`.
 
-            // If I want to support "10/16 crit", I need to pass `skill` to `dealDamage`.
-            // `dealDamage` has `skill` argument.
-
             let critRate = 0.05; // Default 5%
             if (skill && skill.crit) {
                 // Parse "10/16" or number
@@ -2263,6 +2383,13 @@ class Game {
         }
 
         if (this.player.hp <= 0) {
+            // 触发ON_DEATH阶段（亡语效果）
+            this.timeline.emit(TurnPhases.ON_DEATH, { 
+                char: this.player, 
+                opponent: this.enemy, 
+                isPlayer: true 
+            });
+            
             // Rebirth Wings Revive Logic
             if (this.player.name === "重生之翼" && !this.player.buffs.rebirthWingsRevived) {
                 const deadAllies = this.playerTeam.filter(c => c.hp <= 0 && c.name !== "重生之翼");
@@ -2285,6 +2412,13 @@ class Game {
             }
         }
         if (this.enemy.hp <= 0) {
+            // 触发ON_DEATH阶段（亡语效果）
+            this.timeline.emit(TurnPhases.ON_DEATH, { 
+                char: this.enemy, 
+                opponent: this.player, 
+                isPlayer: false 
+            });
+            
             // Rebirth Wings Kill Reset Logic
             if (this.player.name === "重生之翼") {
                 this.player.buffs.godlyGloryEnergy = 0;
@@ -2384,6 +2518,14 @@ class Game {
             target.buffs.statUps[stat] = (target.buffs.statUps[stat] || 0) + val;
             // Cap at 6 / -6
             target.buffs.statUps[stat] = Math.max(-6, Math.min(6, target.buffs.statUps[stat]));
+
+            // Floating Text for modifyStats
+            if (val !== 0) {
+                const label = this.getStatLabel(stat);
+                const sign = val > 0 ? '+' : '-';
+                const color = val > 0 ? '#f1c40f' : '#8e44ad';
+                this.showFloatingText(`${label}${sign}${Math.abs(val)}`, target === this.player, color);
+            }
         }
         this.updateUI();
     }
@@ -2473,12 +2615,20 @@ class Game {
     }
     showDamageNumber(amount, isPlayer, type = 'normal') {
         const el = document.createElement('div');
-        el.className = `damage-number ${type === 'heal' ? 'heal' : ''} ${type === 'pink' ? 'pink' : ''}`;
+        el.className = `damage-number ${type === 'heal' ? 'heal' : ''} ${type === 'pink' ? 'pink' : ''} ${type === 'white' ? 'white' : ''}`;
         el.innerText = amount;
         el.style.left = isPlayer ? '25%' : '75%';
         el.style.top = '40%';
         this.ui.damageOverlay.appendChild(el);
         setTimeout(() => el.remove(), 1000);
+    }
+
+    logTurnSeparator(turn) {
+        const div = document.createElement('div');
+        div.className = 'log-separator';
+        div.innerText = `--- 第 ${turn} 回合 ---`;
+        this.ui.log.appendChild(div);
+        setTimeout(() => div.scrollIntoView({ behavior: "smooth", block: "end" }), 10);
     }
 
     showFloatingText(text, isPlayer, color = '#fff') {
@@ -2628,33 +2778,122 @@ class Game {
             }
         }
     }
-}
 
-// --- Game Mechanics Documentation (Based on Seer Wiki) ---
-// 1. Stat Stages (能力等级): -6 to +6
-//    - Attack/SpAttack: >0: +50% per stage (e.g. +2 = 200%); <0: Inverse (e.g. -2 = 50%)
-//    - Defense/SpDefense: >0: +50% per stage (e.g. +2 = 200% Def = 50% Dmg); <0: Inverse (e.g. -2 = 50% Def = 200% Dmg)
-//    - Speed: >0: +50% per stage; <0: Inverse
-//    - Accuracy: >0: +50% Hit Rate; <0: -15% (-1~-3), -10% (-4~-6)
-// 
-// 2. Damage Types (伤害类型):
-//    - Skill Damage (技能伤害): Affected by Atk/Def, Type Effectiveness, Buffs. (Physical/Special)
-//    - Fixed Damage (固定伤害): Fixed value, unaffected by Def/Type. Affected by Shield/Reductions.
-//    - Percentage Damage (百分比伤害): Based on Max HP. Unaffected by Def/Type.
-//    - True Damage (真实伤害): Ignores all reductions/shields.
-// 
-// 3. Status Effects (异常状态):
-//    - Burn (烧伤): 1/8 Max HP dmg/turn, Attack Power -50%.
-//    - Poison/Frostbite (中毒/冻伤): 1/8 Max HP dmg/turn.
-//    - Sleep (睡眠): Cannot move, cleared on hit.
-//    - Paralyze/Fear (麻痹/害怕): Cannot move.
-//    - Silence (沉默): 1/8 Max HP dmg/turn, Cannot use 5th Skill (In this engine: Cannot use Attribute Skills).
-// 
-// 4. Turn Order (出手顺序):
-//    - Priority (先制) > Speed (速度) > Random.
-//    - Start of Turn Effects: Trigger before Priority check.
-// ---------------------------------------------------------
+
+    // --- Game Mechanics Documentation (Based on Seer Wiki) ---
+    // 1. Stat Stages (能力等级): -6 to +6
+    //    - Attack/SpAttack: >0: +50% per stage (e.g. +2 = 200%); <0: Inverse (e.g. -2 = 50%)
+    //    - Defense/SpDefense: >0: +50% per stage (e.g. +2 = 200% Def = 50% Dmg); <0: Inverse (e.g. -2 = 50% Def = 200% Dmg)
+    //    - Speed: >0: +50% per stage; <0: Inverse
+    //    - Accuracy: >0: +50% Hit Rate; <0: -15% (-1~-3), -10% (-4~-6)
+    // 
+    // 2. Damage Types (伤害类型):
+    //    - Skill Damage (技能伤害): Affected by Atk/Def, Type Effectiveness, Buffs. (Physical/Special)
+    //    - Fixed Damage (固定伤害): Fixed value, unaffected by Def/Type. Affected by Shield/Reductions.
+    //    - Percentage Damage (百分比伤害): Based on Max HP. Unaffected by Def/Type.
+    //    - True Damage (真实伤害): Ignores all reductions/shields.
+    // 
+    // 3. Status Effects (异常状态):
+    //    - Burn (烧伤): 1/8 Max HP dmg/turn, Attack Power -50%.
+    //    - Poison/Frostbite (中毒/冻伤): 1/8 Max HP dmg/turn.
+    //    - Sleep (睡眠): Cannot move, cleared on hit.
+    //    - Paralyze/Fear (麻痹/害怕): Cannot move.
+    //    - Silence (沉默): 1/8 Max HP dmg/turn, Cannot use 5th Skill (In this engine: Cannot use Attribute Skills).
+    // 
+    // 4. Turn Order (出手顺序):
+    //    - Priority (先制) > Speed (速度) > Random.
+    //    - Start of Turn Effects: Trigger before Priority check.
+    // ---------------------------------------------------------
+
+    getStatusConfig(id) {
+        const map = {
+            // === 伤害类 ===
+            'burn': { icon: '🔥', color: '#e74c3c' },
+            'poison': { icon: '☠️', color: '#8e44ad' },
+            'frostbite': { icon: '🥶', color: '#74b9ff' },
+            'bleed': { icon: '🩸', color: '#c0392b' },
+            'immolate': { icon: '🌋', color: '#d35400' },
+            'parasite': { icon: '🐛', color: '#2ecc71' },
+            
+            // === 控制类 ===
+            'sleep': { icon: '💤', color: '#3498db' },
+            'paralyze': { icon: '⚡', color: '#f1c40f' },
+            'freeze': { icon: '❄️', color: '#00cec9' },
+            'fear': { icon: '😨', color: '#95a5a6' },
+            'exhaust': { icon: '😫', color: '#bdc3c7' },
+            'petrify': { icon: '🗿', color: '#7f8c8d' },
+            'stun': { icon: '💫', color: '#f39c12' },
+            
+            // === 削弱类 ===
+            'silence': { icon: '🔇', color: '#7f8c8d' },
+            'blind': { icon: '👁️‍🗨️', color: '#34495e' },
+            'confuse': { icon: '🌀', color: '#e67e22' },
+            'weaken': { icon: '📉', color: '#e74c3c' },
+            'daze': { icon: '😵', color: '#f39c12' },
+            
+            // === 特殊状态 ===
+            'infect': { icon: '🦠', color: '#8e44ad' },
+            'paralysis': { icon: '🔌', color: '#f1c40f' },
+            'flammable': { icon: '🛢️', color: '#e67e22' },
+            'bind': { icon: '⛓️', color: '#636e72' },
+            
+            // === 诅咒类 ===
+            'curse': { icon: '🔮', color: '#8e44ad' },
+            'curse_fire': { icon: '🔥', color: '#d35400' },
+            'curse_fatal': { icon: '💀', color: '#c0392b' },
+            'curse_weak': { icon: '🥀', color: '#7f8c8d' },
+            
+            // === 封锁类 ===
+            'submit': { icon: '🙇', color: '#95a5a6' },
+            'stagnant': { icon: '🛑', color: '#c0392b' },
+            'block_attr': { icon: '🚷', color: '#e74c3c' },
+            'heal_block': { icon: '💔', color: '#c0392b' },
+            'block_attack': { icon: '🛡️', color: '#e74c3c' },
+            
+            // === 正面状态 ===
+            'regen': { icon: '💚', color: '#2ecc71' },
+            'reflect_status': { icon: '🪞', color: '#9b59b6' },
+            'immune_cc': { icon: '🛡️', color: '#3498db' }
+        };
+        return map[id] || { icon: '❓', color: '#95a5a6' };
+    }
+
+    createBuffIcon(container, text, count, className, tooltip, bgColor = null) {
+        const div = document.createElement('div');
+        div.className = `buff-icon ${className}`;
+        if (bgColor) div.style.backgroundColor = bgColor;
+
+        // If text is emoji, use it. If it's a number (count), show it.
+        // For control effects, text is the icon.
+
+        if (className === 'control') {
+            div.innerText = text; // Icon
+            // Add turns indicator if needed? Usually control is 1-2 turns.
+            // Let's add a small subscript for turns if > 1
+            if (count > 1) {
+                const sub = document.createElement('span');
+                sub.style.position = 'absolute';
+                sub.style.bottom = '0';
+                sub.style.right = '0';
+                sub.style.fontSize = '8px';
+                sub.style.color = 'white';
+                sub.innerText = count;
+                div.appendChild(sub);
+            }
+        } else {
+            // For others, text is usually empty string passed in, and we use count
+            const span = document.createElement('span');
+            span.innerText = count > 0 ? count : text;
+            div.appendChild(span);
+        }
+
+        div.onmouseenter = (e) => this.showTooltip(e, tooltip);
+        div.onmouseleave = () => this.hideTooltip();
+        container.appendChild(div);
+    }
+}
 
 window.onload = () => {
     window.game = new Game();
 };
+

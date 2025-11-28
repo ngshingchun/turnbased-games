@@ -1,0 +1,231 @@
+/* 精靈卡片樣式 */
+
+.spirit-card {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 12px;
+  border: 2px solid #0f3460;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.spirit-card:hover {
+  transform: translateY(-2px);
+  border-color: #e94560;
+  box-shadow: 0 8px 25px rgba(233, 69, 96, 0.2);
+}
+
+.spirit-card.active {
+  border-color: #00ff88;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.spirit-card.dead {
+  opacity: 0.5;
+  filter: grayscale(0.8);
+  pointer-events: none;
+}
+
+.spirit-card.enemy {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.spirit-card.enemy .spirit-info {
+  align-items: flex-end;
+}
+
+/* 頭像 */
+.spirit-avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-frame {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #0f3460;
+  background: #16213e;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: bold;
+  color: #e94560;
+  background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
+}
+
+.soulbuff-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #ff6b6b, #e94560);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+  border: 2px solid #1a1a2e;
+  cursor: help;
+}
+
+/* 信息區域 */
+.spirit-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.spirit-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* HP 條 */
+.hp-container {
+  position: relative;
+  height: 16px;
+  background: #2a2a4a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hp-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #00ff88, #00cc6a);
+  transition: width 0.3s ease;
+  border-radius: 8px;
+}
+
+.hp-bar.medium {
+  background: linear-gradient(90deg, #ffc107, #ff9800);
+}
+
+.hp-bar.low {
+  background: linear-gradient(90deg, #ff6b6b, #e94560);
+}
+
+.hp-bar.critical {
+  background: linear-gradient(90deg, #e94560, #c0392b);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.hp-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* PP 條 */
+.pp-container {
+  position: relative;
+  height: 10px;
+  background: #2a2a4a;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.pp-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  transition: width 0.3s ease;
+  border-radius: 5px;
+}
+
+.pp-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 9px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 狀態圖標 */
+.status-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.status-icon {
+  padding: 2px 6px;
+  background: #e94560;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+
+.status-icon.status-poison { background: #9b59b6; }
+.status-icon.status-burn { background: #e74c3c; }
+.status-icon.status-freeze { background: #3498db; }
+.status-icon.status-paralyze { background: #f1c40f; color: #333; }
+.status-icon.status-sleep { background: #95a5a6; }
+
+.stat-modifier {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.stat-modifier.stat-up {
+  background: rgba(0, 255, 136, 0.2);
+  color: #00ff88;
+}
+
+.stat-modifier.stat-down {
+  background: rgba(233, 69, 96, 0.2);
+  color: #e94560;
+}
+
+/* 詳細信息 */
+.spirit-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #0f3460;
+}
+
+.spirit-details .stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 2px;
+}
+
+
+

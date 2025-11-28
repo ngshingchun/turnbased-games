@@ -56,6 +56,11 @@
                         const label = this.getLabel(stat);
                         const action = delta > 0 ? '提升' : '下降';
                         game.log(`${target.name} 的${label}${action}了${Math.abs(delta)}级！`);
+
+                        // Floating Text
+                        const sign = delta > 0 ? '+' : '-';
+                        const color = delta > 0 ? '#f1c40f' : '#8e44ad'; // Gold / Purple
+                        game.showFloatingText(`${label}${sign}${Math.abs(delta)}`, target === game.player, color);
                     }
                 }
             }
@@ -390,14 +395,14 @@
             if (target.buffs.reflectDamage > 0 && damage > 0) {
                 const multiplier = target.buffs.reflectDamageMultiplier || 100;
                 const reflectAmount = Math.floor(damage * multiplier / 100);
-                
+
                 target.buffs.reflectDamage--;
-                
+
                 if (reflectAmount > 0) {
-                    window.DamageEffect?.fixed(game, attacker, reflectAmount, "反弹伤害", { source: target });
+                    window.HpEffect?.fixed(game, attacker, reflectAmount, "反弹伤害", { source: target });
                     game.log(`${target.name} 反弹了 ${reflectAmount} 点伤害！`);
                 }
-                
+
                 game.updateUI();
                 return true;
             }

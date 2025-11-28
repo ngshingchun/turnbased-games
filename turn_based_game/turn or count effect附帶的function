@@ -1,0 +1,528 @@
+以下是按系统分类存储的机制说明：
+
+---
+
+# Team 系统的容器架构（按系统分类）
+
+## 核心概念
+
+### Team 系统的存储结构
+
+Team 系统为每个实体（12只精灵 + 2个场地）维护独立的容器，每个容器按系统（HP, PP, TURN, DAMAGE等）分类存储 Function Calling 对象。
+
+```typescript
+// Team 系统的完整结构
+TeamA = {
+    spirits: [
+        // 精灵 0
+        {
+            // === 固定数据结构 ===
+            hp: { current: 800, max: 1000 },
+            pp: { current: 50, max: 100 },
+            stats: { ... },
+            turnEffects: { list: [...] },
+            countEffects: { data: {...} },
+            
+            // === 按系统分类的容器：原封不动存储 Function Calling ===
+            effectContainers: {
+                // 按系统分类，存储完整的 function calling 对象
+                'TURN': [
+                    {
+                        system: 'TURN',
+                        func: 'ADD',
+                        node: '*',
+                        target: 'self',
+                        effectId: 'regen_4673',
+                        turns: 3,
+                        // ... 原封不动存储所有字段
+                    },
+                    // ... 更多TURN相关的function calling
+                ],
+                
+                'HP': [
+                    {
+                        system: 'HP',
+                        func: 'HEAL',
+                        node: 'TURN_END',
+                        target: 'self',
+                        amount: 100,
+                        effectId: 'hp_heal_4673',
+                        checkTurnEffectId: 'regen_4673',
+                        // ... 原封不动存储所有字段
+                    },
+                    {
+                        system: 'HP',
+                        func: 'DRAIN',
+                        node: 'AFTER_ATTACK',
+                        target: 'opponent',
+                        amount: 50,
+                        effectId: 'hp_drain_8888',
+                        checkTurnEffectId: 'drain_buff_8888',
+                        // ...
+                    },
+                    // ... 更多HP相关的function calling
+                ],
+                
+                'PP': [
+                    {
+                        system: 'PP',
+                        func: 'RESTORE',
+                        node: 'TURN_START',
+                        target: 'self',
+                        amount: 10,
+                        effectId: 'pp_restore_9999',
+                        checkTurnEffectId: 'pp_regen_9999',
+                        // ...
+                    },
+                    // ... 更多PP相关的function calling
+                ],
+                
+                'DAMAGE': [
+                    {
+                        system: 'DAMAGE',
+                        func: 'MODIFY',
+                        node: 'DEAL_DAMAGE',
+                        target: 'self',
+                        multiplier: 1.5,
+                        effectId: 'damage_modify_1234',
+                        checkTurnEffectId: 'damage_boost_1234',
+                        // ...
+                    },
+                    // ... 更多DAMAGE相关的function calling
+                ],
+                
+                'STATS': [
+                    // ... STATS相关的function calling
+                ],
+                
+                'STATUS': [
+                    // ... STATUS相关的function calling
+                ],
+                
+                'PRIO': [
+                    // ... PRIO相关的function calling
+                ],
+                
+                'COUNT': [
+                    // ... COUNT相关的function calling
+                ],
+                
+                // ... 其他系统（SOULBUFF, SWITCH, ITEM, RESIST, IMMUNITY等）
+            }
+        },
+        
+        // 精灵 1-11 (同样的结构)
+        { ... },
+        { ... },
+        // ...
+    ],
+    
+    // === 场地容器1 ===
+    field1: {
+        effectContainers: {
+            'TURN': [ ... ],
+            'HP': [ ... ],
+            // ... 按系统分类
+        }
+    },
+    
+    // === 场地容器2 ===
+    field2: {
+        effectContainers: {
+            'TURN': [ ... ],
+            'HP': [ ... ],
+            // ... 按系统分类
+        }
+    }
+}
+```
+
+---
+
+## 执行流程：添加、筛选、检查、删除
+
+### 步骤1：技能使用时，原封不动添加到对应系统容器
+
+```typescript
+// 在 spirits/solensen.ts 中定义
+const SKILLS = [
+    {
+        id: 'heal_skill',
+        calls: [
+            {
+                system: 'TURN',
+                func: 'ADD',
+                node: '*',
+                target: 'self',
+                effectId: 'regen_4673',
+                turns: 3,
+            },
+            {
+                system: 'HP',
+                func: 'HEAL',
+                node: 'TURN_END',
+                target: 'self',
+                amount: 100,
+                effectId: 'hp_heal_4673',
+                checkTurnEffectId: 'regen_4673',
+            }
+        ]
+    }
+];
+
+// 执行后，Team系统状态：
+const currentSpirit = teamA.spirits[0];  // 当前登场精灵
+
+// 1. TURN.ADD 添加到 TURN 容器
+currentSpirit.effectContainers['TURN'].push({
+    system: 'TURN',
+    func: 'ADD',
+    node: '*',
+    target: 'self',
+    effectId: 'regen_4673',
+    turns: 3,
+    // ... 原封不动存储所有字段
+});
+
+// 2. HP.HEAL 添加到 HP 容器
+currentSpirit.effectContainers['HP'].push({
+    system: 'HP',
+    func: 'HEAL',
+    node: 'TURN_END',
+    target: 'self',
+    amount: 100,
+    effectId: 'hp_heal_4673',
+    checkTurnEffectId: 'regen_4673',
+    // ... 原封不动存储所有字段
+});
+```
+
+---
+
+### 步骤2：每个节点执行时，从对应系统容器筛选并检查
+
+```typescript
+// BattleEngine.executeNode(node: 'TURN_END')
+async executeNode(node: 'TURN_END') {
+    const spiritA = teamA.current;  // 当前登场精灵
+    const spiritB = teamB.current;
+    
+    // 对每个系统，从容器中筛选属于当前节点的效果
+    const SYSTEMS = ['TURN', 'HP', 'PP', 'DAMAGE', 'STATS', 'STATUS', 'PRIO', 'COUNT', ...];
+    
+    const effectsToExecute = [];
+    const effectsToDelete = [];
+    
+    // 遍历所有系统
+    for (const systemName of SYSTEMS) {
+        // 从对应系统的容器中获取所有效果
+        const systemEffects = spiritA.effectContainers[systemName] || [];
+        
+        for (let i = 0; i < systemEffects.length; i++) {
+            const effect = systemEffects[i];
+            
+            // 步骤2.1: 筛选属于当前节点的效果
+            if (!matchesNode(node, effect.node)) {
+                continue;  // 不属于当前节点，跳过
+            }
+            
+            // 步骤2.2: 检查 checkTurnEffectId（如果存在）
+            if (effect.checkTurnEffectId) {
+                const turnEffect = spiritA.turnEffects.get(effect.checkTurnEffectId);
+                if (!turnEffect) {
+                    // ❌ 找不到对应的turnEffect，标记删除
+                    effectsToDelete.push({
+                        system: systemName,
+                        index: i,
+                        effectId: effect.effectId
+                    });
+                    continue;  // 不执行，跳过
+                }
+            }
+            
+            // 步骤2.3: 检查 checkCountEffectId（如果存在）
+            if (effect.checkCountEffectId) {
+                const countEffect = spiritA.countEffects.get(effect.checkCountEffectId);
+                if (!countEffect || countEffect.count <= 0) {
+                    // ❌ 找不到或已用完，标记删除
+                    effectsToDelete.push({
+                        system: systemName,
+                        index: i,
+                        effectId: effect.effectId
+                    });
+                    continue;
+                }
+            }
+            
+            // ✅ 检查通过，加入执行列表
+            effectsToExecute.push({
+                system: systemName,
+                effect: effect  // 原封不动的function calling对象
+            });
+        }
+    }
+    
+    // 步骤2.4: 删除失效的效果（从容器中移除）
+    // 注意：需要从后往前删除，避免索引错乱
+    effectsToDelete.sort((a, b) => b.index - a.index);
+    for (const { system, index } of effectsToDelete) {
+        spiritA.effectContainers[system].splice(index, 1);
+    }
+    
+    // 步骤2.5: 执行有效的效果
+    for (const { system, effect } of effectsToExecute) {
+        const systemFunc = SYSTEMS[system]?.[effect.func];
+        if (systemFunc) {
+            // 使用原封不动的effect对象执行
+            systemFunc.execute(context, effect);
+        }
+    }
+}
+
+// 辅助函数：判断效果是否属于当前节点
+function matchesNode(currentNode: string, effectNode: any): boolean {
+    if (typeof effectNode === 'string') {
+        return effectNode === '*' || effectNode === currentNode;
+    }
+    
+    if (Array.isArray(effectNode)) {
+        return effectNode.includes(currentNode);
+    }
+    
+    if (typeof effectNode === 'object') {
+        // { all: true, except: [...] }
+        if (effectNode.all) {
+            return !effectNode.except?.includes(currentNode);
+        }
+        
+        // { nodes: [...], also: '*' }
+        if (effectNode.nodes) {
+            if (Array.isArray(effectNode.nodes) && effectNode.nodes.includes(currentNode)) {
+                return true;
+            }
+            if (effectNode.also === '*' || effectNode.also === currentNode) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+```
+
+---
+
+## 具体场景示例
+
+### 场景1：正常执行（3回合回血）
+
+**回合1 - 使用技能：**
+```
+执行 TURN.ADD:
+→ spiritA.effectContainers['TURN'].push({
+    system: 'TURN',
+    func: 'ADD',
+    node: '*',
+    effectId: 'regen_4673',
+    turns: 3,
+    ...
+  })
+
+→ 同时更新 spiritA.turnEffects.list 添加标记
+
+执行 HP.HEAL:
+→ spiritA.effectContainers['HP'].push({
+    system: 'HP',
+    func: 'HEAL',
+    node: 'TURN_END',
+    effectId: 'hp_heal_4673',
+    checkTurnEffectId: 'regen_4673',
+    amount: 100,
+    ...
+  })
+```
+
+**回合1 - TURN_END 节点执行：**
+```
+遍历所有系统容器:
+
+HP容器:
+  → 找到 hp_heal_4673 { node: 'TURN_END', ... }
+  → 检查 checkTurnEffectId: 'regen_4673'
+  → 在 turnEffects.list 中找到 ✓
+  → 执行 HP.HEAL
+  → spiritA.hp.current += 100
+
+TURN容器:
+  → 找到 regen_4673 { node: '*', ... }
+  → node: '*' 匹配当前节点 ✓
+  → 执行 TURN.ADD tick
+  → turns: 3 → 2
+```
+
+**回合2 - TURN_END 节点执行：**
+```
+HP容器:
+  → 找到 hp_heal_4673
+  → 检查 checkTurnEffectId: 'regen_4673'
+  → 找到 ✓ (turns: 2)
+  → 执行回血
+
+TURN容器:
+  → 执行 tick: turns: 2 → 1
+```
+
+**回合3 - TURN_END 节点执行：**
+```
+HP容器:
+  → 找到 hp_heal_4673
+  → 检查 checkTurnEffectId: 'regen_4673'
+  → 找到 ✓ (turns: 1)
+  → 执行回血
+
+TURN容器:
+  → 执行 tick: turns: 1 → 0
+  → 'regen_4673' 从 turnEffects.list 删除（过期）
+```
+
+**回合4 - TURN_END 节点执行：**
+```
+HP容器:
+  → 找到 hp_heal_4673
+  → 检查 checkTurnEffectId: 'regen_4673'
+  → 在 turnEffects.list 中找不到 ✗
+  → ❌ 从 effectContainers['HP'] 删除 hp_heal_4673
+  → 不回血
+  → 容器清理完成
+```
+
+---
+
+### 场景2：被对手消除
+
+**回合1 - 使用技能：**
+```
+同上，创建了 regen_4673 和 hp_heal_4673
+```
+
+**回合1 - 对手使用消除技能：**
+```
+对手执行 TURN.DISPEL:
+→ spiritA.turnEffects.list 清空
+→ 'regen_4673' 被删除 ✗
+```
+
+**回合1 - TURN_END 节点执行：**
+```
+HP容器:
+  → 找到 hp_heal_4673
+  → 检查 checkTurnEffectId: 'regen_4673'
+  → 在 turnEffects.list 中找不到 ✗
+  → ❌ 立即从 effectContainers['HP'] 删除 hp_heal_4673
+  → 不回血
+  → 容器清理完成
+```
+
+---
+
+## 所有系统都要支持
+
+### 支持的系统和分类：
+
+```typescript
+// Team 系统中的容器分类（至少14个实体）
+const SYSTEMS = [
+    'TURN',      // 回合效果系统
+    'HP',        // 体力系统
+    'PP',        // 活力系统
+    'DAMAGE',    // 伤害系统
+    'STATS',     // 属性系统
+    'STATUS',    // 异常状态系统
+    'PRIO',      // 先制系统
+    'COUNT',     // 次数效果系统
+    'SOULBUFF',  // 魂印系统
+    'SWITCH',    // 换人系统
+    'ITEM',      // 道具系统
+    'RESIST',    // 抗性系统
+    'IMMUNITY',  // 免疫系统
+    // ... 其他系统
+];
+
+// 每个精灵和场地都有 effectContainers
+spirit.effectContainers = {
+    [systemName]: [
+        // 数组存储该系统的所有 function calling 对象
+        { system: 'HP', func: 'HEAL', ... },  // 原封不动存储
+        { system: 'HP', func: 'DRAIN', ... },
+        // ...
+    ]
+};
+```
+
+---
+
+## 场地容器（Field Containers）
+
+```typescript
+// Team 系统除了12只精灵，还有2个场地容器
+TeamA = {
+    spirits: [ ... ],  // 12只精灵
+    
+    field1: {
+        effectContainers: {
+            'TURN': [ ... ],
+            'HP': [ ... ],
+            // ... 按系统分类
+        }
+    },
+    
+    field2: {
+        effectContainers: {
+            'TURN': [ ... ],
+            'HP': [ ... ],
+            // ... 按系统分类
+        }
+    }
+}
+
+// 执行节点时，也要检查场地容器
+async executeNode(node) {
+    // ... 检查精灵容器
+    
+    // 检查场地容器
+    for (const field of [teamA.field1, teamA.field2]) {
+        for (const systemName of SYSTEMS) {
+            const systemEffects = field.effectContainers[systemName] || [];
+            // ... 同样的筛选、检查、删除、执行逻辑
+        }
+    }
+}
+```
+
+---
+
+## 总结
+
+**存储方式：**
+- 按系统分类：`effectContainers['HP']`, `effectContainers['PP']` 等
+- 原封不动存储：Function Calling 对象完整保存，不修改字段
+- 14个实体容器：12只精灵 + 2个场地，每个都有完整的 effectContainers
+
+**执行机制：**
+1. 添加：技能使用时，将 Function Calling 对象原封不动 push 到对应系统容器
+2. 筛选：执行节点时，从各系统容器中筛选 `node` 匹配的效果
+3. 检查：检查 `checkTurnEffectId` 和 `checkCountEffectId`，失效则标记删除
+4. 删除：从对应系统容器中删除失效效果
+5. 执行：执行通过检查的效果
+
+**优势：**
+- 容器按系统分类，查找高效
+- 原封不动存储，保留所有信息
+- 自动清理，避免容器臃肿
+- 14个独立容器，支持精灵和场地效果
+
+这样设计师在 `spirits/xx.ts` 中定义的效果，会原封不动地存储在对应系统容器中，执行时自动筛选和清理。
+
+
+這裡的場地是指team a和team b的場地,各一個,一個是field a ,一個是field b
+還有一件很重要的,不是綁定turn effect 和count effect 的执行逻辑不需要EffectId

@@ -1,7 +1,8 @@
 /* Global Styles */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #2c3e50;
+    background: url('assets/universe_bg.png') no-repeat center center fixed;
+    background-size: cover;
     color: white;
     display: flex;
     justify-content: center;
@@ -12,9 +13,12 @@ body {
 }
 
 .game-container {
-    width: 800px;
-    height: 600px;
-    background-color: #34495e;
+    width: 1024px;
+    /* Increased width */
+    height: 768px;
+    /* Increased height */
+    background-color: rgba(52, 73, 94, 0.85);
+    /* Semi-transparent */
     border-radius: 10px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     position: relative;
@@ -40,7 +44,12 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
-    width: 40%;
+    width: 45%;
+    background: url('assets/stats_panel_bg.png') no-repeat center center;
+    background-size: 100% 100%;
+    padding: 10px 20px;
+    border-radius: 10px;
+    position: relative;
 }
 
 .enemy-status {
@@ -128,19 +137,23 @@ body {
 
 .hp-bar-container {
     width: 100%;
-    height: 16px;
-    background: #555;
-    border-radius: 8px;
+    height: 20px;
+    background: #222;
+    border-radius: 10px;
     overflow: hidden;
     position: relative;
-    border: 1px solid #222;
+    border: none;
+    background: url('assets/hp_bar_frame.png') no-repeat center center;
+    background-size: 100% 100%;
+    padding: 2px;
+    /* Inner padding for the bar */
 }
 
 .hp-bar {
     height: 100%;
     background: #2ecc71;
     width: 100%;
-    transition: width 0.5s ease-out;
+    transition: width 2.5s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 .hp-bar.enemy {
@@ -177,7 +190,8 @@ body {
 /* Battle Scene */
 .battle-scene {
     flex: 1;
-    background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 100%);
+    background: rgba(0, 0, 0, 0.1);
+    /* Semi-transparent to show universe bg */
     position: relative;
     display: flex;
     justify-content: space-between;
@@ -210,18 +224,17 @@ body {
     /* Face right */
 }
 
-.enemy-sprite {
-    /* Background image set via JS */
-}
+/* .enemy-sprite - Background image set via JS */
 
 /* Bottom Panel */
 .bottom-panel {
     height: 220px;
-    background: #2c3e50;
-    border-top: 4px solid #34495e;
+    background: rgba(20, 30, 40, 0.9);
+    border-top: 1px solid #0ff;
     display: flex;
     padding: 10px;
     gap: 10px;
+    box-shadow: 0 -5px 15px rgba(0, 255, 255, 0.1);
 }
 
 .skills-left-container {
@@ -248,7 +261,7 @@ body {
 
 .battle-log-container {
     flex: 1;
-    background: #000;
+    background: rgba(0, 0, 0, 0.6);
     border-radius: 5px;
     padding: 5px;
     overflow: hidden;
@@ -263,6 +276,16 @@ body {
     color: #0f0;
 }
 
+.log-separator {
+    text-align: center;
+    color: #f1c40f;
+    margin: 10px 0;
+    font-weight: bold;
+    border-top: 1px solid #555;
+    border-bottom: 1px solid #555;
+    padding: 5px 0;
+}
+
 .actions-panel {
     height: 40px;
     display: flex;
@@ -271,35 +294,44 @@ body {
 
 .action-btn {
     flex: 1;
-    background: #e67e22;
-    border: none;
-    color: white;
+    background: url('assets/skill_btn_bg.png') no-repeat center center;
+    background-size: 100% 100%;
+    border: 1px solid #0ff;
+    color: #0ff;
     border-radius: 5px;
     cursor: pointer;
     font-weight: bold;
+    text-shadow: 0 0 5px #0ff;
+    transition: all 0.2s;
 }
 
 .action-btn:hover {
-    background: #d35400;
+    filter: brightness(1.2);
+    box-shadow: 0 0 10px #0ff;
 }
 
 /* Skill Buttons */
 .skill-btn {
-    background: #3498db;
+    background: url('assets/skill_btn_bg.png') no-repeat center center;
+    background-size: 100% 100%;
     border: none;
-    color: white;
+    color: #0ff;
+    /* Cyan text for sci-fi feel */
+    text-shadow: 0 0 5px #0ff;
     border-radius: 5px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    padding: 5px 10px;
+    padding: 5px 15px;
     gap: 10px;
-    transition: background 0.2s, transform 0.1s;
+    transition: transform 0.1s, filter 0.2s;
     position: relative;
+    font-family: 'Orbitron', sans-serif;
+    /* Tech font if available, fallback sans-serif */
 }
 
 .skill-btn:hover {
-    background: #2980b9;
+    filter: brightness(1.2);
 }
 
 .skill-btn:active {
@@ -308,14 +340,18 @@ body {
 
 .skill-btn.ult {
     height: 100%;
-    background: linear-gradient(135deg, #8e44ad, #9b59b6);
+    background: url('assets/ult_btn_bg.png') no-repeat center center;
+    background-size: 100% 100%;
     flex-direction: column;
     justify-content: center;
     text-align: center;
+    color: #ffd700;
+    /* Gold text */
+    text-shadow: 0 0 5px #ffd700;
 }
 
 .skill-btn.ult:hover {
-    background: linear-gradient(135deg, #732d91, #8e44ad);
+    filter: brightness(1.2);
 }
 
 .skill-icon {
@@ -429,6 +465,11 @@ body {
 
 .damage-number.pink {
     color: #ff69b4;
+}
+
+.damage-number.white {
+    color: #ffffff;
+    text-shadow: 0 0 4px #000;
 }
 
 @keyframes floatUp {
@@ -686,4 +727,213 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
     background: #7f8c8d !important;
+}
+
+/* Entry Screen */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #2c3e50;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.title-container {
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+.game-title {
+    font-size: 64px;
+    margin: 0;
+    color: #f1c40f;
+    text-shadow: 4px 4px 0 #c0392b;
+    font-style: italic;
+}
+
+.game-subtitle {
+    font-size: 24px;
+    margin: 10px 0;
+    color: #bdc3c7;
+}
+
+.menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.menu-btn {
+    padding: 15px 40px;
+    font-size: 24px;
+    background: #3498db;
+    border: none;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+    box-shadow: 0 4px 0 #2980b9;
+}
+
+.menu-btn:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+}
+
+.menu-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 #2980b9;
+}
+
+/* Selection Screen */
+.screen-title {
+    font-size: 32px;
+    margin-bottom: 20px;
+}
+
+.selection-container {
+    display: flex;
+    gap: 20px;
+    height: 400px;
+    width: 90%;
+    max-width: 1000px;
+}
+
+.team-preview {
+    width: 200px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.preview-slots {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.slot {
+    height: 50px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 14px;
+    cursor: pointer;
+    position: relative;
+}
+
+.slot:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.slot.empty {
+    justify-content: center;
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+.slot-remove {
+    position: absolute;
+    right: 5px;
+    color: #e74c3c;
+    font-weight: bold;
+    display: none;
+}
+
+.slot:hover .slot-remove {
+    display: block;
+}
+
+.spirit-pool-container {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.spirit-pool {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px;
+}
+
+.pool-item {
+    width: 80px;
+    height: 80px;
+    background: #34495e;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.pool-item:hover {
+    background: #2c3e50;
+    border-color: #3498db;
+    transform: scale(1.05);
+}
+
+.pool-item img {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+}
+
+.pool-item span {
+    font-size: 10px;
+    margin-top: 5px;
+    text-align: center;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selection-controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 20px;
+}
+
+.control-btn {
+    padding: 10px 30px;
+    font-size: 18px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.control-btn.primary {
+    background: #2ecc71;
+    color: white;
+}
+
+.control-btn.primary:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
+.control-btn.secondary {
+    background: #95a5a6;
+    color: white;
 }

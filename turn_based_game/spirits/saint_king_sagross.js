@@ -13,7 +13,7 @@
          * 魂印效果列表 (Point Form)
          * 每个效果标注：触发时机、路由目标、绑定方
          */
-        soulEffects: [
+        soulbuffs: [
             // === [PP操控] ===
             {
                 id: 'sagross_ally_attr_pp',
@@ -62,7 +62,7 @@
                 name: '寰之力',
                 desc: '恢复体力后2回合攻击50%概率威力翻倍',
                 phase: 'ON_HEAL',
-                route: 'TurnEffect+DamageEffect.conditionalDouble',
+                route: 'TurnEffect+HpEffect.conditionalDouble',
                 turns: 2,
                 chance: 50,
                 skillType: 'attack',
@@ -214,8 +214,8 @@
                 const hasDodge = actor.buffs.turnEffects?.some(e => e.id === 'sagross_dodge');
                 if (hasDodge) {
                     const dmg = Math.floor(actor.buffs.sagrossDmgTaken * 1.2);
-                    if (window.DamageEffect?.percent) {
-                        window.DamageEffect.percent(g, opponent, dmg, '秩序守恒');
+                    if (window.HpEffect?.percent) {
+                        window.HpEffect.percent(g, opponent, dmg, '秩序守恒');
                     } else {
                         opponent.hp = Math.max(0, opponent.hp - dmg);
                         g.log(`【魂印·寰】秩序守恒反击！${opponent.name} 受到 ${dmg} 点伤害！`);
@@ -298,11 +298,11 @@
         });
     }
 
-    // === SoulEffect 注册（恢复体力触发）===
-    function registerSoulEffects() {
-        if (!window.SoulEffect) return;
+    // === SoulBuff 注册（恢复体力触发）===
+    function registerSoulBuffs() {
+        if (!window.SoulBuff) return;
         
-        window.SoulEffect.register(key, window.SoulEffect.Phases.ON_HEAL, (g, payload) => {
+        window.SoulBuff.register(key, window.SoulBuff.Phases.ON_HEAL, (g, payload) => {
             const tgt = payload.target;
             if (!tgt || tgt.key !== key) return;
             
@@ -315,10 +315,10 @@
 
     registerSpirit(data, registerPhases);
     
-    // 延迟注册 SoulEffect
-    if (window.SoulEffect) {
-        registerSoulEffects();
+    // 延迟注册 SoulBuff
+    if (window.SoulBuff) {
+        registerSoulBuffs();
     } else {
-        window.addEventListener('DOMContentLoaded', registerSoulEffects);
+        window.addEventListener('DOMContentLoaded', registerSoulBuffs);
     }
 })();

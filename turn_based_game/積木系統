@@ -1,0 +1,355 @@
+以下是整理好的文档，便于其他AI理解你的架构：
+
+---
+
+# 回合制战斗系统架构文档
+
+## 核心架构：TurnPhase 与 Team 系统并行交互
+
+### 1. 两个并行系统
+
+#### **Team 系统（状态存储）**
+- **Team A** 和 **Team B**：各自存储6只精灵的完整状态
+- 存储内容：
+  - 每只精灵的 `hp`, `pp`, `stats`
+  - 每只精灵的 `turnEffects`（回合效果列表）
+  - 每只精灵的 `countEffects`（次数效果数据）
+  - 每只精灵的 `soulBuff`（魂印效果）
+  - 每只精灵的 `status`（异常状态）
+- 标记字段：
+  - `currentIndex`：当前在场精灵的索引（0-5）
+  - 通过 `current` 访问当前在场精灵
+
+#### **TurnPhase 系统（节点执行器）**
+- 36个固定节点（TURN_START, BATTLE_PHASE_START, FIRST_DEAL_DAMAGE等）
+- 作用：按顺序执行节点流程
+- 每个回合开始时清空（`turnPhase.reset()`）
+
+---
+
+## 2. 执行流程：每回合的完整循环
+
+### **阶段1：回合开始**
+```
+1. 清空 TurnPhase 系统
+   turnPhase.reset()  // 清空所有节点效果队列
+   
+2. 进入 Node 6: TURN_START
+   - 从 Team 系统读取在场精灵的效果
+   - 执行属于 TURN_START 的效果
+   - 效果通过 function calling 修改 Team 系统状态
+```
+
+### **阶段2：每个 Node 的执行逻辑**
+```
+对于每个 Node（比如 Node 7: BATTLE_PHASE_START）:
+
+步骤1: 执行预设积木（节点自带的固定逻辑）
+   ├─ BATTLE_PHASE_START → 自动调用 PRIO.COMPARE
+   │  ├─ 比较双方先制
+   │  ├─ 决定 firstMover 和 secondMover（A或B）
+   │  └─ 留下记号：turnPhase.firstMover = 'A'
+   │
+   ├─ DEATH_CHECK_1/2/3 → 自动调用 HP.CHECK
+   │  ├─ 检查精灵 hp.current <= 0
+   │  └─ 返回死亡状态
+   │
+   └─ 其他节点可能有其他预设逻辑
+
+步骤2: 从 Team 系统动态读取效果
+   ├─ 从 TeamA.current（当前在场精灵）读取：
+   │  ├─ turnEffects.list[] → 筛选 nodes.includes(currentNode) 的
+   │  ├─ countEffects.data{} → 筛选 nodes.includes(currentNode) 的
+   │  └─ soulBuff.effects[] → 筛选 trigger === currentNode 的
+   │
+   └─ 从 TeamB.current（当前在场精灵）读取：
+      ├─ turnEffects.list[] → 筛选 nodes.includes(currentNode) 的
+      ├─ countEffects.data{} → 筛选 nodes.includes(currentNode) 的
+      └─ soulBuff.effects[] → 筛选 trigger === currentNode 的
+
+步骤3: 执行这些效果（Function Calling）
+   for each effect in effectsToExecute:
+     for each call in effect.calls:
+       系统名 = call.system  // 'DAMAGE', 'HP', 'PP', etc.
+       函数名 = call.func    // 'ATTACK', 'HEAL', 'USE', etc.
+       
+       执行: SYSTEMS[系统名][函数名].execute(context)
+       ↓
+       直接修改 Team 系统里的精灵状态
+       ├─ PP.USE → 修改 target.pp.current
+       ├─ DAMAGE.ATTACK → 修改 defender.hp.current
+       ├─ HP.HEAL → 修改 target.hp.current
+       └─ ... 其他系统同理
+
+步骤4: 执行自定义 handler（如果有）
+   如果传入了 handler，执行它
+
+步骤5: 进入下一个 Node，重复上述流程
+```
+
+---
+
+## 3. 预设积木（节点自带的固定逻辑）
+
+某些节点包含预设逻辑，无需从 Team 系统读取，而是节点内置调用。
+
+### **BATTLE_PHASE_START（Node 7）**
+```javascript
+预设逻辑:
+1. 自动调用 PRIO.COMPARE(node, { stateA, stateB, skillA, skillB })
+   ├─ 计算双方先制值
+   ├─ 比较先制，决定先后手
+   └─ 返回 { first: 'A', second: 'B', reason: 'priority' }
+
+2. 留下记号到 TurnPhase:
+   turnPhase.firstMover = result.first  // 'A' 或 'B'
+   turnPhase.secondMover = result.second
+
+3. 这个记号用于后续通用节点的解析:
+   - 通用节点: ACTION_START
+   - 解析为: FIRST_ACTION_START (如果 firstMover='A')
+   - 解析为: SECOND_ACTION_START (如果 secondMover='A')
+```
+
+### **DEATH_CHECK 节点（3个）**
+```javascript
+Node 17: DEATH_CHECK_1
+Node 32: DEFEAT_CHECK  
+Node ??: （第三个死亡检查节点）
+
+预设逻辑:
+1. 自动调用 HP.CHECK(node, { target })
+   ├─ 检查 target.hp.current <= 0
+   └─ 返回 { isDead: true/false }
+
+2. 如果死亡:
+   ├─ 标记精灵死亡状态
+   └─ 可能需要触发死亡流程（ON_DEATH_SWITCH等）
+```
+
+---
+
+## 4. 效果存储方式（效果如何标明执行节点）
+
+### **TurnEffect（回合效果）**
+```javascript
+存储位置: Team.spirits[i].turnEffects.list[]
+
+格式:
+{
+    id: 'damage_boost',
+    name: '伤害提升',
+    turns: 3,
+    nodes: ['FIRST_DEAL_DAMAGE', 'SECOND_DEAL_DAMAGE'],  // ← 标明在哪些node执行
+    handler: {
+        onStart: (ctx) => { ... },
+        onNode: (ctx) => { ... }  // 在指定的nodes执行
+    },
+    calls: [
+        { system: 'DAMAGE', func: 'MODIFY', multiplier: 1.5 }
+    ]
+}
+```
+
+### **CountEffect（次数效果）**
+```javascript
+存储位置: Team.spirits[i].countEffects.data{}
+
+格式:
+{
+    'shield_3': {
+        id: 'shield_3',
+        count: 2,
+        max: 3,
+        nodes: ['FIRST_BEFORE_DAMAGE', 'SECOND_BEFORE_DAMAGE'],  // ← 标明在哪些node执行
+        calls: [
+            { system: 'SHIELD', func: 'ABSORB', value: 100 }
+        ]
+    }
+}
+```
+
+### **SoulBuff（魂印效果）**
+```javascript
+存储位置: Team.spirits[i].soulBuff.effects[]
+
+格式:
+{
+    id: 'gaia_regen',
+    trigger: 'TURN_END',  // ← 标明在哪个node触发
+    condition: (ctx) => ctx.self.key === 'kingGaia',
+    calls: [
+        { system: 'HP', func: 'HEAL_PERCENT', percent: 30 }
+    ]
+}
+```
+
+---
+
+## 5. Function Calling（积木系统）
+
+### **系统定义**
+```javascript
+系统列表:
+- DAMAGE（伤害系统）
+- HP（体力系统）
+- PP（活力系统）
+- STATS（属性系统）
+- STATUS（异常状态系统）
+- PRIO（先制系统）
+- TURN（回合效果系统）
+- COUNT（次数效果系统）
+- SOULBUFF（魂印系统）
+```
+
+### **调用方式**
+```javascript
+// 积木调用格式
+{
+    system: 'DAMAGE',    // 系统名
+    func: 'ATTACK',      // 函数名
+    node: 'DEAL_DAMAGE', // 目标节点（可选，用于验证）
+    target: 'opponent',  // 目标
+    power: 150           // 参数
+}
+
+// 执行流程
+const systemFunc = SYSTEMS[call.system][call.func];
+const result = systemFunc.execute({
+    attacker: ctx.self,
+    defender: ctx.opponent,
+    ...call.params
+});
+
+// 结果直接修改 Team 系统
+// 例如: defender.hp.current -= damage
+```
+
+---
+
+## 6. 关键设计原则
+
+### **分离原则**
+- TurnPhase：不存储状态，只执行流程
+- Team：不执行逻辑，只存储状态
+- 交流方式：通过 Function Calling（积木系统）
+
+### **动态加载原则**
+- 不预先注册效果到 TurnPhase
+- 每个 Node 执行时从 Team 动态读取
+- 根据效果的 `nodes` 或 `trigger` 筛选
+
+### **双向修改原则**
+- 效果读取：TurnPhase → Team（读取效果）
+- 状态修改：Team ← Function Calling（修改状态）
+
+---
+
+## 7. 实现伪代码
+
+```javascript
+// BattleEngine.executeNode(node)
+async executeNode(node, handler = null) {
+    // 1. 设置当前节点
+    this.turnPhase.setNode(node);
+    
+    // 2. 构建上下文
+    const ctx = {
+        engine: this,
+        stateA: this.teamA.current,
+        stateB: this.teamB.current,
+        teamA: this.teamA,
+        teamB: this.teamB,
+        currentNode: node
+    };
+    
+    // 3. 执行预设积木（节点自带的逻辑）
+    if (node === 'BATTLE_PHASE_START') {
+        const result = PRIO.COMPARE().execute(ctx);
+        this.turnPhase.firstMover = result.first;
+        this.turnPhase.secondMover = result.second;
+    }
+    
+    if (node.includes('DEATH_CHECK')) {
+        const isDeadA = HP.CHECK().execute({ target: ctx.stateA });
+        const isDeadB = HP.CHECK().execute({ target: ctx.stateB });
+        // 处理死亡逻辑
+    }
+    
+    // 4. 从 Team 系统读取效果
+    const effectsToExecute = [];
+    
+    // 读取 A 方当前精灵的效果
+    if (ctx.stateA) {
+        // 读取 turnEffects
+        for (const effect of ctx.stateA.turnEffects.list) {
+            if (effect.nodes?.includes(node)) {
+                effectsToExecute.push({ source: ctx.stateA, effect });
+            }
+        }
+        
+        // 读取 countEffects
+        for (const [id, effect] of Object.entries(ctx.stateA.countEffects.data)) {
+            if (effect.nodes?.includes(node)) {
+                effectsToExecute.push({ source: ctx.stateA, effect });
+            }
+        }
+        
+        // 读取魂印
+        if (ctx.stateA.soulBuff?.effects) {
+            for (const effect of ctx.stateA.soulBuff.effects) {
+                if (effect.trigger === node) {
+                    effectsToExecute.push({ source: ctx.stateA, effect });
+                }
+            }
+        }
+    }
+    
+    // 读取 B 方当前精灵的效果（同上）
+    if (ctx.stateB) {
+        // ... 同样的逻辑
+    }
+    
+    // 5. 执行效果（Function Calling）
+    for (const { source, effect } of effectsToExecute) {
+        if (effect.calls) {
+            for (const call of effect.calls) {
+                const systemFunc = SYSTEMS[call.system]?.[call.func];
+                if (systemFunc) {
+                    // 执行积木，直接修改 Team 系统状态
+                    systemFunc.execute({
+                        ...ctx,
+                        target: call.target === 'self' ? source : ctx.stateB,
+                        attacker: source,
+                        defender: call.target === 'self' ? ctx.stateB : source
+                    });
+                }
+            }
+        }
+    }
+    
+    // 6. 执行自定义 handler
+    if (handler) {
+        await handler(ctx);
+    }
+    
+    // 7. 返回结果
+    return { completed: true };
+}
+```
+
+---
+
+## 8. 总结
+
+核心思想：
+1. TurnPhase 是执行器（流程控制）
+2. Team 是存储器（状态存储）
+3. Function Calling 是桥梁（积木系统）
+4. 效果存储在 Team，标注了执行节点
+5. 每个 Node 执行时动态读取并执行
+6. 某些节点有预设积木（固定逻辑）
+
+---
+
+这份文档可直接发给其他AI。如需补充或修改，告诉我。

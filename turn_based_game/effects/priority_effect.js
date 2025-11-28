@@ -10,6 +10,7 @@
         addPriority(game, target, turns, amount = 2, source = "先制") {
             target.buffs.priorityNext = Math.max(target.buffs.priorityNext || 0, turns);
             game.log(`${target.name} 获得 ${turns} 回合先制+${amount}！(${source})`);
+            game.showFloatingText(`先制+${amount}`, target === game.player, '#00bfff');
             game.updateUI();
 
             // 路由到 TurnEffect
@@ -24,6 +25,7 @@
         addForcedPriority(game, target, turns, source = "必先制") {
             target.buffs.priorityForceNext = Math.max(target.buffs.priorityForceNext || 0, turns);
             game.log(`${target.name} 获得 ${turns} 回合必定先出手！(${source})`);
+            game.showFloatingText("必定先手", target === game.player, '#00bfff');
             game.updateUI();
 
             if (window.TurnEffect?.run) {
@@ -37,6 +39,7 @@
         addPriorityDown(game, target, turns, amount = 2, source = "减速") {
             game.addTurnEffect(target, '减速', turns, 'priority_down', `先制-${amount}`);
             game.log(`${target.name} ${turns} 回合先制-${amount}！(${source})`);
+            game.showFloatingText(`先制-${amount}`, target === game.player, '#8e44ad');
 
             if (window.TurnEffect?.run) {
                 window.TurnEffect.run('priority_down', game, { target, turns, amount });

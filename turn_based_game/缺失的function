@@ -1,0 +1,474 @@
+整理你提出的要点，并检查现有实现：
+
+
+[4 tools called]
+
+
+以下是整理后的系统架构文档，便于其他AI理解：
+
+---
+
+# 系统架构与函数清单文档
+
+## 核心原则
+
+### 1. 数据来源：从 Spirits Folder 读取
+- 所有精灵数据（hp, pp, stats, skills, soulBuff）来自 `spirits/*.js` 文件
+- 技能定义的 `calls` 数组包含 function calling 和 nodes
+- 魂印的 `effects` 数组包含 trigger nodes 和 calls
+- Team 系统从 SpiritRegistry 读取并创建 SpiritState
+
+### 2. 封装原则：只暴露 Function 接口
+- BattleEngine 在每个 node 执行时只能调用 function
+- 不暴露底层实现（hp.current, pp.use() 等）
+- 通过系统接口（HP.GET, PP.GET, TEAM.GET_CURRENT_HP 等）访问数据
+
+### 3. 多节点调用：支持复杂节点模式
+- 支持 "所有节点除了某些节点" 模式
+- 支持 "特定节点" 模式
+- 一个效果可以同时在多个节点执行
+
+---
+
+## 系统函数清单（需要实现的完整列表）
+
+### **TEAM 系统 (`core/team.ts`)**
+
+```typescript
+/**
+ * TEAM System - 队伍系统
+ * 
+ * 函数列表:
+ * 
+ * 1. 获取当前精灵数据
+ *    - TEAM.GET_CURRENT_SPIRIT(side: 'A'|'B')
+ *    - TEAM.GET_CURRENT_HP(side) → number
+ *    - TEAM.GET_CURRENT_MAX_HP(side) → number
+ *    - TEAM.GET_CURRENT_PP(side, skillIndex?) → number
+ *    - TEAM.GET_CURRENT_MAX_PP(side, skillIndex?) → number
+ *    - TEAM.GET_CURRENT_STAT(side, statName: 'atk'|'def'|...) → number
+ *    - TEAM.GET_CURRENT_TURN_EFFECTS(side, node?) → TurnEffect[]
+ *    - TEAM.GET_CURRENT_COUNT_EFFECTS(side, node?) → CountEffect[]
+ *    - TEAM.GET_CURRENT_STATUS(side) → Status[]
+ *    - TEAM.GET_CURRENT_SOULBUFF(side) → SoulBuff
+ * 
+ * 2. 获取对手精灵数据
+ *    - TEAM.GET_OPPONENT_SPIRIT(side)
+ *    - TEAM.GET_OPPONENT_HP(side)
+ *    - TEAM.GET_OPPONENT_MAX_HP(side)
+ *    - TEAM.GET_OPPONENT_PP(side, skillIndex?)
+ *    - TEAM.GET_OPPONENT_STAT(side, statName)
+ *    - TEAM.GET_OPPONENT_TURN_EFFECTS(side, node?)
+ *    - TEAM.GET_OPPONENT_COUNT_EFFECTS(side, node?)
+ *    - TEAM.GET_OPPONENT_STATUS(side)
+ *    - TEAM.GET_OPPONENT_SOULBUFF(side)
+ * 
+ * 3. 获取队伍数据
+ *    - TEAM.GET_ALL_SPIRITS(side) → SpiritState[]
+ *    - TEAM.GET_ALIVE_SPIRITS(side) → SpiritState[]
+ *    - TEAM.GET_ALIVE_COUNT(side) → number
+ *    - TEAM.IS_DEFEATED(side) → boolean
+ *    - TEAM.GET_CURRENT_INDEX(side) → number
+ * 
+ * 4. 换人相关
+ *    - TEAM.CHECK_CAN_SWITCH(side) → { can: boolean, reason?: string }
+ *    - TEAM.GET_AVAILABLE_SWITCHES(side) → number[]
+ *    - TEAM.SWITCH(side, newIndex, forced?)
+ *    - TEAM.FORCE_SWITCH(side, newIndex)
+ *    - TEAM.AUTO_SWITCH_NEXT(side) → number | null
+ */
+```
+
+### **HP 系统 (`core/hp.ts`)**
+
+```typescript
+/**
+ * HP System - 体力系统
+ * 
+ * 函数列表:
+ * - HP.HEAL(nodes, target, amount, options)
+ * - HP.HEAL_PERCENT(nodes, target, percent, basedOn: 'max'|'current'|'lost')
+ * - HP.SET(nodes, target, value: number | 'max' | 'min')
+ * - HP.DRAIN(nodes, target, amount)
+ * - HP.DRAIN_PERCENT(nodes, target, percent, basedOn)
+ * - HP.BLOCK_HEAL(nodes, target, turns)
+ * - HP.UNBLOCK_HEAL(nodes, target)
+ * - HP.REVIVE(nodes, target, percent: number | 'full')
+ * - HP.LOCK(nodes, target, minHp)  // 锁血
+ * - HP.UNLOCK(nodes, target)
+ * - HP.SACRIFICE(nodes, target, amount)
+ * - HP.SHARE(nodes, target, ratio)  // HP分摊
+ * - HP.CHECK(nodes, target, condition: 'alive'|'dead'|'below'|'above', value?) → { isAlive: boolean, hp: number }
+ * - HP.GET(nodes, target) → { current: number, max: number, percent: number }
+ * - HP.GET_PERCENT(nodes, target) → number  // 0-100
+ * - HP.IS_FULL(nodes, target) → boolean
+ * - HP.IS_EMPTY(nodes, target) → boolean
+ */
+```
+
+### **PP 系统 (`core/pp.ts`)**
+
+```typescript
+/**
+ * PP System - 活力系统
+ * 
+ * 函数列表:
+ * - PP.USE(nodes, target, amount, skillIndex?, options)
+ * - PP.RESTORE(nodes, target, amount: number | 'all', skillIndex?)
+ * - PP.RESTORE_PERCENT(nodes, target, percent, skillIndex?)
+ * - PP.RESTORE_ALL(nodes, target)
+ * - PP.DRAIN(nodes, target, amount, skillIndex?)
+ * - PP.DRAIN_ALL(nodes, target, skillIndex?)
+ * - PP.SET(nodes, target, value, skillIndex?)
+ * - PP.CLEAR(nodes, target, skillIndex?)
+ * - PP.LOCK(nodes, target, turns)
+ * - PP.UNLOCK(nodes, target)
+ * - PP.BLOCK(nodes, target, turns)
+ * - PP.UNBLOCK(nodes, target)
+ * - PP.CHECK(nodes, target, condition: 'empty'|'full'|'below'|'above'|'locked', value?) → { result: boolean, pp: number }
+ * - PP.GET(nodes, target, skillIndex?) → { current: number, max: number, percent: number }
+ * - PP.IS_EMPTY(nodes, target, skillIndex?) → boolean
+ * - PP.IS_FULL(nodes, target, skillIndex?) → boolean
+ * - PP.IS_LOCKED(nodes, target) → boolean
+ */
+```
+
+### **DAMAGE 系统 (`core/damage.ts`)**
+
+```typescript
+/**
+ * DAMAGE System - 伤害系统
+ * 
+ * 函数列表:
+ * - DAMAGE.ATTACK(nodes, target, power, options)  // 红伤
+ * - DAMAGE.FIXED(nodes, target, amount, options)  // 粉伤
+ * - DAMAGE.PERCENT(nodes, target, ratio, basedOn: 'max'|'current'|'lost', options)  // 百分比伤
+ * - DAMAGE.TRUE(nodes, target, amount, options)  // 白伤（无视抗性）
+ * - DAMAGE.ABSORB(nodes, target, ratio, options)  // 吸取伤害
+ * - DAMAGE.REFLECT(nodes, target, ratio, options)  // 反弹伤害
+ * - DAMAGE.CHAIN(nodes, targets, count, decay)  // 连锁伤害
+ * - DAMAGE.EXECUTE(nodes, target, threshold)  // 斩杀（HP低于阈值直接死亡）
+ * - DAMAGE.RECOIL(nodes, attacker, ratio)  // 反伤（自伤）
+ * - DAMAGE.CALC(nodes, target, formula: function)  // 自定义公式
+ * - DAMAGE.MODIFY(nodes, target, multiplier)  // 修改伤害倍率
+ * - DAMAGE.GET_LAST(nodes, target) → number  // 获取上次受到的伤害
+ */
+```
+
+### **STATS 系统 (`core/stats.ts`)**
+
+```typescript
+/**
+ * STATS System - 属性系统
+ * 
+ * 函数列表:
+ * - STATS.MODIFY(nodes, target, stats: {atk, def, spAtk, spDef, speed}, turns?, chance?)
+ * - STATS.MODIFY_RANDOM(nodes, target, count, value, turns?)
+ * - STATS.CLEAR_UPS(nodes, target, onSuccess?)
+ * - STATS.CLEAR_DOWNS(nodes, target)
+ * - STATS.CLEAR_ALL(nodes, target)
+ * - STATS.REVERSE(nodes, target, onSuccess?, onFail?)
+ * - STATS.STEAL(nodes, target, stats, turns?)
+ * - STATS.COPY(nodes, target, from, stats?)
+ * - STATS.SYNC(nodes, target, from)
+ * - STATS.LOCK(nodes, target, turns)  // 锁定属性等级
+ * - STATS.UNLOCK(nodes, target)
+ * - STATS.GET(nodes, target, statName) → { base: number, stage: number, final: number }
+ * - STATS.CALC(nodes, target, statName) → number  // 计算最终属性值
+ * - STATS.HAS_UP(nodes, target, statName?) → boolean
+ * - STATS.HAS_DOWN(nodes, target, statName?) → boolean
+ */
+```
+
+### **STATUS 系统 (`core/status.ts`)**
+
+```typescript
+/**
+ * STATUS System - 异常状态系统
+ * 
+ * 函数列表:
+ * - STATUS.APPLY(nodes, target, statusId, turns, chance?, source?)
+ * - STATUS.REMOVE(nodes, target, statusId)
+ * - STATUS.CLEAR(nodes, target, type?: 'all'|'control'|'damage')
+ * - STATUS.CHECK_CONTROL(nodes, target) → { isControlled: boolean, status?: Status }
+ * - STATUS.CHECK_IMMUNE(nodes, target, statusId) → boolean
+ * - STATUS.ADD_IMMUNITY(nodes, target, statusId, turns)
+ * - STATUS.REMOVE_IMMUNITY(nodes, target, statusId)
+ * - STATUS.GET(nodes, target, statusId) → Status | null
+ * - STATUS.HAS(nodes, target, statusId) → boolean
+ * - STATUS.GET_ALL(nodes, target) → Status[]
+ * - STATUS.IS_CONTROLLED(nodes, target) → boolean  // 是否被控制（睡眠、冰冻等）
+ * - STATUS.TICK(nodes, target) → Status[]  // 回合递减，返回过期的
+ * - STATUS.REFLECT(nodes, target, turns)  // 反弹异常状态
+ */
+```
+
+### **PRIO 系统 (`core/priority.ts`)**
+
+```typescript
+/**
+ * PRIO System - 先制系统
+ * 
+ * 函数列表:
+ * - PRIO.ADD(nodes, target, amount, turns?)
+ * - PRIO.FORCE(nodes, target, turns?)  // 强制先手
+ * - PRIO.DOWN(nodes, target, amount, turns?)
+ * - PRIO.BLOCK(nodes, target, turns?)
+ * - PRIO.UNBLOCK(nodes, target)
+ * - PRIO.LAST(nodes, target, turns?)  // 强制后手
+ * - PRIO.SWAP(nodes)  // 交换先后手
+ * - PRIO.LOCK(nodes, target, turns?)  // 锁定先后手
+ * - PRIO.RESET(nodes, target)
+ * - PRIO.CALC(nodes, target, skill?) → { priority: number, forced?: boolean, blocked?: boolean }
+ * - PRIO.COMPARE(nodes, stateA, stateB, skillA, skillB) → { first: 'A'|'B', second: 'A'|'B', reason: string }
+ * - PRIO.GET(nodes, target) → number
+ */
+```
+
+### **TURN 系统 (`core/turn_effect.ts`)** - 需要支持多节点
+
+```typescript
+/**
+ * TURN System - 回合效果系统
+ * 
+ * 函数列表:
+ * - TURN.ADD(nodes, target, id, name, turns, calls?, options)
+ *    // nodes 支持:
+ *    //   - 单个节点: 'DEAL_DAMAGE'
+ *    //   - 多个节点: ['DEAL_DAMAGE', 'AFTER_ATTACK']
+ *    //   - 所有节点: '*'
+ *    //   - 所有节点除了某些: { all: true, except: ['TURN_START'] }
+ *    //   - 特定节点 + 所有节点: { nodes: ['SKILL_EFFECT'], also: '*' }
+ * 
+ * - TURN.REMOVE(nodes, target, id)
+ * - TURN.HAS(nodes, target, id) → boolean
+ * - TURN.GET(nodes, target, id) → TurnEffect | null
+ * - TURN.GET_ALL(nodes, target, node?) → TurnEffect[]  // 获取所有或特定节点的
+ * - TURN.DISPEL(nodes, target, excludeUndispellable?)
+ * - TURN.PROTECT(nodes, target, turns, type?)
+ * - TURN.TICK(nodes, target) → TurnEffect[]  // 回合递减
+ * - TURN.BURN(nodes, target, turns, damage)
+ * - TURN.POISON(nodes, target, turns, damage)
+ * - TURN.HEAL(nodes, target, turns, amount)
+ * - TURN.CLEAR(nodes, target)
+ */
+```
+
+### **COUNT 系统 (`core/count_effect.ts`)**
+
+```typescript
+/**
+ * COUNT System - 次数效果系统
+ * 
+ * 函数列表:
+ * - COUNT.ADD(nodes, target, effectId, amount, max?)
+ * - COUNT.SET(nodes, target, effectId, count, max?)
+ * - COUNT.CONSUME(nodes, target, effectId, amount?)
+ * - COUNT.CLEAR(nodes, target, effectId)
+ * - COUNT.HAS(nodes, target, effectId) → boolean
+ * - COUNT.GET(nodes, target, effectId) → number
+ * - COUNT.SHIELD(nodes, target, value, shieldType?)
+ * - COUNT.REFLECT(nodes, target, ratio, turns?)
+ * - COUNT.STACK(nodes, target, effectId, maxStack)
+ * - COUNT.ABSORB(nodes, target, effectId, amount)
+ * - COUNT.IMMUNITY(nodes, target, immuneType: 'abnormal'|'damage'|'stat'|..., count)
+ * - COUNT.GET_ALL(nodes, target, node?) → CountEffect[]
+ */
+```
+
+### **SOULBUFF 系统 (`core/soulbuff.ts`)**
+
+```typescript
+/**
+ * SOULBUFF System - 魂印系统
+ * 
+ * 函数列表:
+ * - SOULBUFF.REGISTER(spiritKey, soulbuff)
+ * - SOULBUFF.TRIGGER(nodes, target, effectId, param?)
+ * - SOULBUFF.DISABLE(nodes, target, effectId?)
+ * - SOULBUFF.ENABLE(nodes, target, effectId?)
+ * - SOULBUFF.GET(nodes, target) → SoulBuff | null
+ * - SOULBUFF.GET_EFFECTS(nodes, target, triggerNode?) → SoulBuffEffect[]
+ * - SOULBUFF.IS_ACTIVE(nodes, target) → boolean
+ */
+```
+
+### **SWITCH 系统 (`core/switch.ts`)** - 缺失，需要创建
+
+```typescript
+/**
+ * SWITCH System - 换人系统
+ * 
+ * 函数列表:
+ * - SWITCH.CHECK_CAN_SWITCH(nodes, target) → { can: boolean, reason?: string }
+ * - SWITCH.GET_AVAILABLE(nodes, target) → number[]
+ * - SWITCH.EXECUTE(nodes, target, newIndex, forced?)
+ * - SWITCH.FORCE(nodes, target, newIndex)
+ * - SWITCH.AUTO_SWITCH_NEXT(nodes, target) → number | null
+ * - SWITCH.BLOCK(nodes, target, turns)  // 封锁换人
+ * - SWITCH.UNBLOCK(nodes, target)
+ * - SWITCH.IS_BLOCKED(nodes, target) → boolean
+ * - SWITCH.GET_PREVIOUS(nodes, target) → SpiritState | null
+ * - SWITCH.GET_NEW(nodes, target) → SpiritState | null
+ */
+```
+
+### **ITEM 系统 (`core/item.ts`)** - 缺失，需要创建
+
+```typescript
+/**
+ * ITEM System - 道具系统
+ * 
+ * 函数列表:
+ * - ITEM.USE(nodes, target, itemId: 'pp_potion'|'hp_potion'|..., targetSpirit?, options)
+ * - ITEM.GET_COUNT(nodes, target, itemId) → number
+ * - ITEM.ADD(nodes, target, itemId, count)
+ * - ITEM.REMOVE(nodes, target, itemId, count)
+ * - ITEM.CHECK_CAN_USE(nodes, target, itemId) → { can: boolean, reason?: string }
+ * - ITEM.GET_ALL(nodes, target) → { itemId: string, count: number }[]
+ * 
+ * 预设道具:
+ * - 'pp_potion': 恢复所有技能10PP
+ * - 'hp_potion': 恢复350HP
+ * - 'revive': 复活精灵（恢复50%HP）
+ */
+```
+
+### **RESIST 系统 (`core/resist.ts`)** - 缺失，需要创建
+
+```typescript
+/**
+ * RESIST System - 抗性系统
+ * 
+ * 函数列表:
+ * - RESIST.SET_FIXED(nodes, target, value: 0-100)  // 固定伤害抗性
+ * - RESIST.SET_PERCENT(nodes, target, value: 0-100)  // 百分比伤害抗性
+ * - RESIST.SET_TRUE(nodes, target, value: 0-100)  // 真实伤害抗性
+ * - RESIST.MODIFY_FIXED(nodes, target, delta)
+ * - RESIST.MODIFY_PERCENT(nodes, target, delta)
+ * - RESIST.MODIFY_TRUE(nodes, target, delta)
+ * - RESIST.GET_FIXED(nodes, target) → number
+ * - RESIST.GET_PERCENT(nodes, target) → number
+ * - RESIST.GET_TRUE(nodes, target) → number
+ * - RESIST.CALC_DAMAGE(nodes, target, baseDamage, damageType: 'fixed'|'percent'|'true') → number
+ * - RESIST.APPLY(nodes, target, damage, damageType) → { finalDamage: number, resisted: number }
+ */
+```
+
+### **IMMUNITY 系统 (`core/immunity.ts`)** - 缺失，需要创建
+
+```typescript
+/**
+ * IMMUNITY System - 免疫系统
+ * 
+ * 函数列表:
+ * - IMMUNITY.ADD_STATUS(nodes, target, statusId, turns)
+ * - IMMUNITY.REMOVE_STATUS(nodes, target, statusId)
+ * - IMMUNITY.ADD_DAMAGE_TYPE(nodes, target, damageType: 'fixed'|'percent'|'true', turns)
+ * - IMMUNITY.REMOVE_DAMAGE_TYPE(nodes, target, damageType)
+ * - IMMUNITY.ADD_STAT_DROP(nodes, target, turns)
+ * - IMMUNITY.REMOVE_STAT_DROP(nodes, target)
+ * - IMMUNITY.CHECK_STATUS(nodes, target, statusId) → boolean
+ * - IMMUNITY.CHECK_DAMAGE_TYPE(nodes, target, damageType) → boolean
+ * - IMMUNITY.CHECK_STAT_DROP(nodes, target) → boolean
+ * - IMMUNITY.GET_ALL(nodes, target) → { status: string[], damageType: string[], statDrop: boolean }
+ * - IMMUNITY.CLEAR(nodes, target, type?: 'all'|'status'|'damage'|'stat')
+ */
+```
+
+---
+
+## 多节点调用解决方案
+
+### 问题：一个效果需要在多个节点执行
+
+**解决方案：扩展 nodes 参数格式**
+
+```typescript
+// 现在的格式（单个节点）
+{ system: 'TURN', func: 'ADD', node: 'SKILL_EFFECT', ... }
+
+// 新的格式（支持多种模式）
+{
+    system: 'TURN',
+    func: 'ADD',
+    nodes: 'SKILL_EFFECT',  // 单个节点（兼容旧格式）
+    // 或
+    nodes: ['SKILL_EFFECT', 'AFTER_ATTACK'],  // 多个节点
+    // 或
+    nodes: '*',  // 所有节点
+    // 或
+    nodes: { all: true, except: ['TURN_START', 'TURN_END'] },  // 所有节点除了某些
+    // 或
+    nodes: { 
+        nodes: ['SKILL_EFFECT'],  // 在这个节点执行具体效果
+        also: '*'  // 同时在所有节点执行（可能只是tick）
+    },
+    ...
+}
+```
+
+### 实现示例
+
+```typescript
+// 在 BattleEngine.executeNode 中
+function getEffectsForNode(node: string, spirit: SpiritState): Effect[] {
+    const effects = [];
+    
+    // 读取 turnEffects
+    for (const effect of spirit.turnEffects.list) {
+        if (matchesNode(node, effect.nodes)) {
+            effects.push(effect);
+        }
+    }
+    
+    return effects;
+}
+
+function matchesNode(currentNode: string, effectNodes: any): boolean {
+    if (typeof effectNodes === 'string') {
+        return effectNodes === '*' || effectNodes === currentNode;
+    }
+    
+    if (Array.isArray(effectNodes)) {
+        return effectNodes.includes(currentNode);
+    }
+    
+    if (typeof effectNodes === 'object') {
+        // { all: true, except: [...] }
+        if (effectNodes.all) {
+            return !effectNodes.except?.includes(currentNode);
+        }
+        
+        // { nodes: [...], also: '*' }
+        if (effectNodes.nodes) {
+            if (Array.isArray(effectNodes.nodes) && effectNodes.nodes.includes(currentNode)) {
+                return true;
+            }
+            if (effectNodes.also === '*' || effectNodes.also === currentNode) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+```
+
+---
+
+## 缺失的系统总结
+
+需要创建的新系统文件：
+1. `core/switch.ts` - 换人系统
+2. `core/item.ts` - 道具系统
+3. `core/resist.ts` - 抗性系统（独立封装）
+4. `core/immunity.ts` - 免疫系统（独立封装）
+
+需要增强的系统：
+1. `core/turn_effect.ts` - 支持多节点模式
+2. `core/team.ts` - 添加更多 GET 函数
+
+---
+
+这份文档可以直接给其他AI。需要我继续完善哪个部分？

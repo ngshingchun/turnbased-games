@@ -1,291 +1,520 @@
+/**
+ * 重生之翼 (Rebirth Wings) - 精灵定义
+ * 魂印: 神
+ * 
+ * 使用新架构: SYSTEM.SUBFUNC(nodes, handler)
+ * 所有技能包含 PP.USE 调用
+ */
 (() => {
-    const key = 'rebirthWings';
-    const data = {
-        key,
-        name: "重生之翼",
-        asset: "assets/rebirth_wings.png",
-        maxHp: 800,
-        soulMark: "神",
-        soulMarkDesc: "【魂印】神\n自身被击败后100%随机复活出战背包内已被击败的1只精灵（无法复活重生之翼，boss有效）；\n[神耀能量]:\n自身可以储存最多6层神耀能量,神耀能量的层数越多,获得的效果越多:\n1层:减少自身受到伤害的8%,每增加1层额外获得8%的减伤\n2层:免疫所有异常状态、免疫所有能力下降状态\n3层:自身出手起则每回合结束后恢复自身最大体力的1/3\n4层:免疫并反弹自身受到的固定伤害\n5层:所有攻击技能先制额外+1\n6层：自身所有攻击技能伤害提升60%且第五技能威力提升不再消耗自身神耀能量；\n赛尔对战中击败对手后自身神耀能量清零且下回合先制额外+3",
-        resist: { fixed: 0, percent: 0, trueDmg: 0 },
+    const NODE = window.TurnPhaseNode;
 
-        /**
-         * 魂印效果列表 (Point Form)
-         */
-        soulEffects: [
-            // === [死亡] 复活效果 ===
-            {
-                id: 'rebirth_revive',
-                name: '重生之力',
-                desc: '被击败后100%随机复活已被击败的1只精灵',
-                phase: 'ON_DEATH',
-                route: 'SoulEffect.reviveAlly',
-                excludeSelf: true,                 // 无法复活自身
-                chance: 100,
-                owner: 'self'
-            },
-            // === [神耀能量] 层级效果 ===
+    // =========================================================================
+    // 精灵基础数据
+    // =========================================================================
+    const SPIRIT = {
+        key: 'rebirthWings',
+        name: '重生之翼',
+        element: '神',
+        maxHp: 800,
+        maxPp: 100,
+        attack: 115,
+        defense: 100,
+        spAttack: 100,
+        spDefense: 100,
+        speed: 115,
+        resist: { fixed: 0, percent: 0, trueDmg: 0 }
+    };
+
+    // =========================================================================
+    // 魂印定义
+    // =========================================================================
+    /**
+     * 【魂印】神
+     * 自身被击败后100%随机复活出战背包内已被击败的1只精灵（无法复活重生之翼，boss有效）；
+     * [神耀能量]:
+     * 1层:减少自身受到伤害的8%,每增加1层额外获得8%的减伤
+     * 2层:免疫所有异常状态、免疫所有能力下降状态
+     * 3层:自身出手起则每回合结束后恢复自身最大体力的1/3
+     * 4层:免疫并反弹自身受到的固定伤害
+     * 5层:所有攻击技能先制额外+1
+     * 6层：自身所有攻击技能伤害提升60%且第五技能威力提升不再消耗自身神耀能量；
+     * 赛尔对战中击败对手后自身神耀能量清零且下回合先制额外+3
+     */
+    const SOULBUFF = {
+        name: '神',
+        desc: '【魂印】神\n复活已击败的精灵；神耀能量1-6层提供各种增益；击败对手后清零+先制+3',
+        
+        effects: [
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀1层: 减伤8%/层
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_1',
                 name: '神耀·减伤',
-                desc: '每层神耀能量减少8%受到伤害',
-                phase: 'ON_HIT',
-                condition: 'godlyGloryEnergy >= 1',
-                route: 'DamageEffect.reduction',
-                value: 8,                          // 每层8%
-                scaling: 'godlyGloryEnergy',       // 按层数叠加
-                owner: 'self'
+                trigger: NODE.ON_HIT_RECV,
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 1,
+                calls: [
+                    { 
+                        system: 'DAMAGE', 
+                        func: 'MODIFY', 
+                        multiplier: (ctx) => 1 - (ctx.self.flags?.godlyGloryEnergy || 0) * 0.08 
+                    }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀2层: 免疫异常和能力下降
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_2',
                 name: '神耀·免疫',
-                desc: '2层以上免疫异常状态与能力下降',
-                phase: 'PASSIVE',
-                condition: 'godlyGloryEnergy >= 2',
-                route: 'ImmuneEffect',
-                immuneType: ['abnormal', 'stat_down'],
-                owner: 'self'
+                trigger: 'PASSIVE',
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 2,
+                calls: [
+                    { system: 'TEAM', func: 'COUNT', target: 'self', action: 'set', countId: 'abnormal_immune', value: 9999, flags: { immuneType: 'abnormal' } },
+                    { system: 'TEAM', func: 'COUNT', target: 'self', action: 'set', countId: 'stat_down_immune', value: 9999, flags: { immuneType: 'stat_down' } }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀3层: 每回合恢复1/3体力
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_3',
                 name: '神耀·回复',
-                desc: '3层以上每回合结束恢复1/3最大体力',
-                phase: 'ON_TURN_END',
-                condition: 'godlyGloryEnergy >= 3',
-                route: 'HealEffect',
-                healType: 'max_percent',
-                value: 33,                         // 1/3 ≈ 33%
-                owner: 'self'
+                trigger: NODE.TURN_END,
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 3 && ctx.self.flags?.hasActed,
+                calls: [
+                    { system: 'HP', func: 'HEAL_PERCENT', target: 'self', percent: 33, ofMax: true }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀4层: 免疫并反弹固伤
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_4',
                 name: '神耀·反弹',
-                desc: '4层以上免疫并反弹固定伤害',
-                phase: 'ON_BEFORE_HIT',
-                condition: 'godlyGloryEnergy >= 4',
-                route: 'ReflectEffect+ImmuneEffect',
-                immuneType: 'fixed_damage',
-                reflectType: 'fixed_damage',
-                owner: 'self'
+                trigger: NODE.BEFORE_HIT_RECV,
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 4 && ctx.damageType === 'fixed',
+                calls: [
+                    { system: 'DAMAGE', func: 'REFLECT', target: 'opponent', value: (ctx) => ctx.damage },
+                    { system: 'BLOCK', func: 'NULLIFY' }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀5层: 攻击技能先制+1
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_5',
                 name: '神耀·先制',
-                desc: '5层以上攻击技能先制+1',
-                phase: 'ON_CALCULATE_PRIORITY',
-                condition: 'godlyGloryEnergy >= 5',
-                route: 'PriorityEffect',
-                value: 1,
-                skillType: 'attack',
-                owner: 'self'
+                trigger: NODE.PRIORITY_CALC,
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 5 && ctx.skill?.type === 'attack',
+                calls: [
+                    { system: 'PRIO', func: 'ADD', target: 'self', value: 1 }
+                ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 神耀6层: 攻击伤害+60%
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_glory_6',
                 name: '神耀·强攻',
-                desc: '6层时攻击伤害+60%且第五技能不消耗能量',
-                phase: 'ON_CALCULATE_DAMAGE',
-                condition: 'godlyGloryEnergy >= 6',
-                route: 'DamageEffect.increase',
-                value: 60,
-                skillType: 'attack',
-                owner: 'self'
+                trigger: NODE.DAMAGE_CALC,
+                condition: (ctx) => ctx.self.key === 'rebirthWings' && (ctx.self.flags?.godlyGloryEnergy || 0) >= 6 && ctx.skill?.type === 'attack',
+                calls: [
+                    { system: 'DAMAGE', func: 'MODIFY', multiplier: 1.6 }
+                ]
             },
-            // === [击败] 清零先制 ===
+
+            // ─────────────────────────────────────────────────────────────────
+            // 击败对手: 神耀清零+先制+3
+            // ─────────────────────────────────────────────────────────────────
             {
                 id: 'rebirth_ko_reset',
                 name: '神耀·清算',
-                desc: '击败对手后神耀能量清零且下回合先制+3',
-                phase: 'ON_KO',
-                route: 'CountEffect+PriorityEffect',
-                resetEnergy: true,
-                priorityBonus: 3,
-                priorityTurns: 1,
-                owner: 'self'
-            }
-        ],
+                trigger: NODE.ON_KO,
+                condition: (ctx) => ctx.self.key === 'rebirthWings',
+                calls: [
+                    { system: 'TEAM', func: 'FLAG', target: 'self', flag: 'godlyGloryEnergy', value: 0 },
+                    { system: 'PRIO', func: 'ADD', target: 'self', value: 3, turns: 1 }
+                ]
+            },
 
-        skills: [
+            // ─────────────────────────────────────────────────────────────────
+            // 死亡时: 复活队友
+            // ─────────────────────────────────────────────────────────────────
             {
-                name: "正义天启歌", type: "ultimate", power: 170, pp: 5, maxPp: 5,
-                desc: "第五技能\n消耗自身所有神耀能量，每消耗1层此技能威力提升50；\n无视伤害限制效果；\n后出手则下1回合令对手使用的攻击技能无效",
-                priority: 0,
-                effects: [
-                    { id: 862, args: [], note: "消耗神耀，每层+50威力", route: "DamageEffect.scaling", scaling: "godlyGloryEnergy" },
-                    { id: 697, args: [], note: "无视伤害限制", route: "DamageEffect.ignoreCap" },
-                    { id: 863, args: [], note: "后出手则1回合对手攻击无效", route: "BlockEffect.attackImmunity", condition: "movedLast" }
+                id: 'rebirth_revive',
+                name: '重生之力',
+                trigger: NODE.ON_DEATH,
+                condition: (ctx) => ctx.self.key === 'rebirthWings',
+                calls: [
+                    { system: 'TEAM', func: 'REVIVE_RANDOM', target: 'ally', excludeSelf: true, hpPercent: 50 }
                 ]
             },
+
+            // ─────────────────────────────────────────────────────────────────
+            // 出手后标记
+            // ─────────────────────────────────────────────────────────────────
             {
-                name: "无上天命剑", type: "attack", power: 150, pp: 5, maxPp: 5,
-                desc: "物理攻击\n无视攻击免疫效果；\n本回合未击败对手则下1回合反弹受到伤害的1/2；\n击败对手则获得2层神耀能量；\n附加对手上次造成伤害数值的固定伤害",
-                priority: 0,
-                effects: [
-                    { id: 699, args: [], note: "无视攻击免疫", route: "DamageEffect.ignoreImmunity" },
-                    { id: 864, args: [], note: "未击败则1回合反弹50%伤害", route: "ReflectEffect", condition: "!ko" },
-                    { id: 865, args: [2], note: "击败则+2层神耀", route: "CountEffect", condition: "ko" },
-                    { id: 807, args: [], note: "附加对手上次伤害的固伤", route: "DamageEffect.fixed", value: "lastDamageDealt" }
-                ]
-            },
-            {
-                name: "黎羽幻生", type: "buff", power: 0, pp: 5, maxPp: 5,
-                desc: "属性攻击\n技能使用成功时，全属性+1；\n恢复自身最大体力的1/1；\n获得2层神耀能量；\n下2回合自身攻击技能必定打出致命一击",
-                priority: 0,
-                effects: [
-                    { id: 585, args: [1], note: "全属性+1", route: "StatEffect" },
-                    { id: 43, args: [], note: "恢复满体力", route: "HealEffect", healType: "full" },
-                    { id: 860, args: [2], note: "+2层神耀能量", route: "CountEffect" },
-                    { id: 58, args: [2], note: "2回合必致命", route: "TurnEffect+CritEffect", owner: "self" }
-                ]
-            },
-            {
-                name: "挚金命轮", type: "buff", power: 0, pp: 5, maxPp: 5,
-                desc: "属性攻击\n100%令对手全属性-1；\n4回合内若对手使用属性技能则令对手所有技能降低2点PP值；\n命中后70%令对手失明",
-                priority: 0,
-                effects: [
-                    { id: 749, args: [1], note: "对手全属性-1", route: "StatEffect", owner: "opponent" },
-                    { id: 861, args: [4, 2], note: "4回合对手属性技能降2PP", route: "TurnEffect", owner: "opponent" },
-                    { id: 756, args: [70], note: "70%失明", route: "StatusEffect" }
-                ]
-            },
-            {
-                name: "银雾之翼", type: "attack", power: 85, pp: 20, maxPp: 20, crit: "10/16",
-                desc: "物理攻击 先制+3\n消除对手回合类效果，消除成功使对手下回合先制-2；\n消除对手能力提升状态，消除成功则令对手下回合所有技能先制-2；\n若打出致命一击则获得2层神耀能量, 否则获得1层",
-                priority: 3,                       // 标注：先制+3
-                effects: [
-                    { id: 867, args: [], note: "消除回合效果成功则先制-2", route: "TurnEffect.clear+PriorityEffect", owner: "opponent" },
-                    { id: 868, args: [], note: "消除强化成功则先制-2", route: "StatEffect.clear+PriorityEffect", owner: "opponent" },
-                    { id: 866, args: [], note: "致命+2层神耀/否则+1层", route: "CountEffect+CritEffect" }
+                id: 'rebirth_acted',
+                name: '出手标记',
+                trigger: NODE.AFTER_ATTACK,
+                condition: (ctx) => ctx.self.key === 'rebirthWings',
+                calls: [
+                    { system: 'TEAM', func: 'FLAG', target: 'self', flag: 'hasActed', value: true }
                 ]
             }
         ]
     };
 
-    /**
-     * 注册 TurnPhase 处理器
-     */
-    function registerPhases(timeline, game) {
-        // === ENTRY: 登场 ===
-        timeline.on(TurnPhases.ENTRY, (g, { actor }) => {
-            if (!actor || actor.key !== key) return;
+    // =========================================================================
+    // 技能定义
+    // =========================================================================
+    const SKILLS = [
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能1: 正义天启歌 (第五技能)
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'rebirth_skill_1',
+            name: '正义天启歌',
+            type: 'ultimate',
+            element: '神',
+            category: 'physical',
+            power: 170,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 'must_hit',
+            flags: { ignoreDamageLimit: true },
+            desc: '第五技能\n消耗自身所有神耀能量，每消耗1层此技能威力提升50；\n无视伤害限制效果；\n后出手则下1回合令对手使用的攻击技能无效',
             
-            // 初始化神耀能量
-            actor.buffs.godlyGloryEnergy = actor.buffs.godlyGloryEnergy || 0;
-            actor.buffs.rebirthWingsResetPriority = 0;
-        });
-
-        // === CALCULATE_PRIORITY: 先制计算 ===
-        timeline.on(TurnPhases.CALCULATE_PRIORITY, (g, { char, skill, priorityMod }) => {
-            if (!char || char.key !== key) return;
-            
-            // 神耀5层：攻击技能先制+1
-            if (char.buffs.godlyGloryEnergy >= 5 && skill?.type === 'attack') {
-                priorityMod.bonus = (priorityMod.bonus || 0) + 1;
-            }
-            
-            // 击败后下回合先制+3
-            if (char.buffs.rebirthWingsResetPriority > 0) {
-                priorityMod.bonus = (priorityMod.bonus || 0) + 3;
-            }
-        });
-
-        // === ON_HIT: 受击减伤（神耀） ===
-        timeline.on(TurnPhases.ON_HIT, (g, { target, damageMod }) => {
-            if (!target || target.key !== key) return;
-            
-            // 神耀减伤：每层8%
-            const energy = target.buffs.godlyGloryEnergy || 0;
-            if (energy >= 1) {
-                const reduction = energy * 8;
-                damageMod.multiplier = (damageMod.multiplier || 1) * (1 - reduction / 100);
-                g.log(`【魂印·神】神耀能量${energy}层，减伤${reduction}%！`);
-            }
-        });
-
-        // === ON_BEFORE_HIT: 固伤反弹（神耀4层） ===
-        timeline.on(TurnPhases.BEFORE_HIT, (g, { target, attacker, damageType, damage }) => {
-            if (!target || target.key !== key) return;
-            if (target.buffs.godlyGloryEnergy < 4) return;
-            
-            // 固伤反弹
-            if (damageType === 'fixed') {
-                g.log(`【魂印·神】神耀护盾反弹固定伤害 ${damage}！`);
-                attacker.hp = Math.max(0, attacker.hp - damage);
-                return { cancel: true, nullified: true, reflected: true };
-            }
-        });
-
-        // === CALCULATE_DAMAGE: 伤害增幅（神耀6层） ===
-        timeline.on(TurnPhases.CALCULATE_DAMAGE, (g, { attacker, skill, damageMod }) => {
-            if (!attacker || attacker.key !== key) return;
-            if (!skill || skill.type === 'buff') return;
-            
-            // 神耀6层：攻击伤害+60%
-            if (attacker.buffs.godlyGloryEnergy >= 6) {
-                damageMod.multiplier = (damageMod.multiplier || 1) * 1.6;
-                g.log(`【魂印·神】神耀满层！攻击伤害+60%！`);
-            }
-        });
-
-        // === TURN_END: 回合结束 ===
-        timeline.on(TurnPhases.TURN_END, (g, { actor }) => {
-            if (!actor || actor.key !== key) return;
-            
-            // 神耀3层：恢复1/3最大体力
-            if (actor.buffs.godlyGloryEnergy >= 3) {
-                const healAmt = Math.floor(actor.maxHp / 3);
-                if (window.HealEffect?.heal) {
-                    window.HealEffect.heal(g, actor, healAmt, '神耀能量');
-                } else {
-                    g.heal(actor, healAmt, "神耀能量");
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 0,
+                    amount: 1
+                },
+                // DAMAGE.ATTACK - 造成伤害 (消耗神耀加威力，6层时不消耗)
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: (ctx) => {
+                        const energy = ctx.self.flags?.godlyGloryEnergy || 0;
+                        return 170 + energy * 50;
+                    },
+                    flags: { ignoreDamageLimit: true },
+                    afterCalc: (ctx) => {
+                        // 6层时不消耗能量
+                        if ((ctx.self.flags?.godlyGloryEnergy || 0) < 6) {
+                            ctx.self.flags = ctx.self.flags || {};
+                            ctx.self.flags.godlyGloryEnergy = 0;
+                        }
+                    }
+                },
+                // 条件: 后出手则对手下1回合攻击无效
+                {
+                    system: 'BRANCH',
+                    node: NODE.AFTER_ATTACK,
+                    condition: (ctx) => !ctx.isFirstMover,
+                    onTrue: [
+                        { system: 'TURN', func: 'ADD', target: 'opponent', effectId: 'attack_block', turns: 1, flags: { blockType: 'attack' } }
+                    ]
                 }
-            }
-            
-            // 递减击败先制
-            if (actor.buffs.rebirthWingsResetPriority > 0) {
-                actor.buffs.rebirthWingsResetPriority--;
-            }
-        });
+            ]
+        },
 
-        // === ON_KO: 击败对手 ===
-        timeline.on(TurnPhases.ON_KO, (g, { attacker, target }) => {
-            if (!attacker || attacker.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能2: 无上天命剑
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'rebirth_skill_2',
+            name: '无上天命剑',
+            type: 'attack',
+            element: '神',
+            category: 'physical',
+            power: 150,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 100,
+            flags: { ignoreAttackImmune: true },
+            desc: '物理攻击\n无视攻击免疫效果；\n本回合未击败对手则下1回合反弹受到伤害的1/2；\n击败对手则获得2层神耀能量；\n附加对手上次造成伤害数值的固定伤害',
             
-            // 击败：神耀清零 + 下回合先制+3
-            g.log(`【魂印·神】击败对手！神耀能量清零，下回合先制+3！`);
-            attacker.buffs.godlyGloryEnergy = 0;
-            attacker.buffs.rebirthWingsResetPriority = 1;
-            g.showFloatingText("神耀清算", true);
-        });
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 1,
+                    amount: 1
+                },
+                // DAMAGE.ATTACK - 造成伤害
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: 150,
+                    flags: { ignoreAttackImmune: true }
+                },
+                // 条件: 击败/未击败
+                {
+                    system: 'BRANCH',
+                    node: NODE.AFTER_ATTACK,
+                    condition: (ctx) => ctx.opponent.hp <= 0,
+                    onTrue: [
+                        // 击败: +2层神耀
+                        { 
+                            system: 'TEAM', 
+                            func: 'FLAG', 
+                            target: 'self', 
+                            flag: 'godlyGloryEnergy', 
+                            value: (ctx) => Math.min(6, (ctx.self.flags?.godlyGloryEnergy || 0) + 2)
+                        }
+                    ],
+                    onFalse: [
+                        // 未击败: 1回合反弹50%伤害
+                        { system: 'TURN', func: 'ADD', target: 'self', effectId: 'damage_reflect', turns: 1, flags: { reflectPercent: 50 } }
+                    ]
+                },
+                // DAMAGE.FIXED - 附加对手上次伤害的固伤
+                {
+                    system: 'DAMAGE',
+                    func: 'FIXED',
+                    node: NODE.AFTER_ATTACK,
+                    target: 'opponent',
+                    value: (ctx) => ctx.opponent.flags?.lastDamageDealt || 0
+                }
+            ]
+        },
 
-        // === ON_DEATH: 自身被击败（复活） ===
-        timeline.on(TurnPhases.ON_DEATH, (g, { char, isPlayer }) => {
-            if (!char || char.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能3: 黎羽幻生
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'rebirth_skill_3',
+            name: '黎羽幻生',
+            type: 'buff',
+            element: '神',
+            category: 'attribute',
+            power: 0,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 'must_hit',
+            desc: '属性攻击\n技能使用成功时，全属性+1；\n恢复自身最大体力的1/1；\n获得2层神耀能量；\n下2回合自身攻击技能必定打出致命一击',
             
-            // 尝试复活队友
-            const team = isPlayer ? g.playerTeam : g.enemyTeam;
-            const deadAllies = team?.filter(c => c.hp <= 0 && c.key !== key) || [];
-            
-            if (deadAllies.length > 0) {
-                const toRevive = deadAllies[Math.floor(Math.random() * deadAllies.length)];
-                toRevive.hp = Math.floor(toRevive.maxHp * 0.5);  // 复活50%血量
-                g.log(`【魂印·神】重生之力发动！${toRevive.name} 被复活！`);
-                g.showFloatingText("重生之力", isPlayer);
-            }
-        });
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 2,
+                    amount: 1
+                },
+                // STATS.MODIFY - 全属性+1
+                {
+                    system: 'STATS',
+                    func: 'MODIFY',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    stats: { atk: 1, def: 1, spAtk: 1, spDef: 1, speed: 1 }
+                },
+                // HP.SET - 恢复满体力
+                {
+                    system: 'HP',
+                    func: 'SET',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    value: 'max'
+                },
+                // TEAM.FLAG - +2层神耀能量
+                {
+                    system: 'TEAM',
+                    func: 'FLAG',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    flag: 'godlyGloryEnergy',
+                    value: (ctx) => Math.min(6, (ctx.self.flags?.godlyGloryEnergy || 0) + 2)
+                },
+                // TURN.ADD - 2回合必致命
+                {
+                    system: 'TURN',
+                    func: 'ADD',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'self',
+                    effectId: 'guaranteed_crit',
+                    turns: 2,
+                    flags: { guaranteedCrit: true }
+                }
+            ]
+        },
 
-        // === GET_ICONS: 获取状态图标 ===
-        timeline.on(TurnPhases.GET_ICONS, (g, { char, icons }) => {
-            if (char.key !== key) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能4: 挚金命轮
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'rebirth_skill_4',
+            name: '挚金命轮',
+            type: 'buff',
+            element: '神',
+            category: 'attribute',
+            power: 0,
+            pp: 5,
+            maxPp: 5,
+            priority: 0,
+            accuracy: 100,
+            desc: '属性攻击\n100%令对手全属性-1；\n4回合内若对手使用属性技能则令对手所有技能降低2点PP值；\n命中后70%令对手失明',
             
-            const energy = char.buffs.godlyGloryEnergy || 0;
-            if (energy > 0) {
-                icons.push({ val: energy, type: 'soul-effect', desc: `魂印·神: 神耀能量${energy}层` });
-            }
-            if (char.buffs.rebirthWingsResetPriority > 0) {
-                icons.push({ val: '+3', type: 'priority', desc: '魂印·神: 击败先制加成' });
-            }
-        });
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 3,
+                    amount: 1
+                },
+                // STATS.MODIFY - 100%对手全属性-1
+                {
+                    system: 'STATS',
+                    func: 'MODIFY',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    stats: { atk: -1, def: -1, spAtk: -1, spDef: -1, speed: -1 },
+                    chance: 100
+                },
+                // TURN.ADD - 4回合对手使用属性技能降PP
+                {
+                    system: 'TURN',
+                    func: 'ADD',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    effectId: 'pp_drain',
+                    turns: 4,
+                    onSkillUse: [
+                        {
+                            system: 'BRANCH',
+                            condition: (ctx) => ctx.usedSkill?.type === 'buff',
+                            onTrue: [
+                                { system: 'PP', func: 'REDUCE_ALL', target: 'opponent', amount: 2 }
+                            ]
+                        }
+                    ]
+                },
+                // STATUS.APPLY - 70%失明
+                {
+                    system: 'STATUS',
+                    func: 'APPLY',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    status: 'blind',
+                    turns: 2,
+                    chance: 70
+                }
+            ]
+        },
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 技能5: 银雾之翼
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            id: 'rebirth_skill_5',
+            name: '银雾之翼',
+            type: 'attack',
+            element: '神',
+            category: 'physical',
+            power: 85,
+            pp: 20,
+            maxPp: 20,
+            priority: 3,
+            accuracy: 100,
+            crit: '10/16',
+            desc: '物理攻击 先制+3\n消除对手回合类效果，消除成功使对手下回合先制-2；\n消除对手能力提升状态，消除成功则令对手下回合所有技能先制-2；\n若打出致命一击则获得2层神耀能量, 否则获得1层',
+            
+            calls: [
+                // PP.USE - 消耗PP
+                {
+                    system: 'PP',
+                    func: 'USE',
+                    node: NODE.BEFORE_HIT,
+                    target: 'self',
+                    skillIndex: 4,
+                    amount: 1
+                },
+                // TURN.DISPEL - 消除回合效果
+                {
+                    system: 'TURN',
+                    func: 'DISPEL',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    onSuccess: [
+                        { system: 'PRIO', func: 'ADD', target: 'opponent', value: -2, turns: 1 }
+                    ]
+                },
+                // STATS.CLEAR_UPS - 消除强化
+                {
+                    system: 'STATS',
+                    func: 'CLEAR_UPS',
+                    node: NODE.SKILL_EFFECT,
+                    target: 'opponent',
+                    onSuccess: [
+                        { system: 'PRIO', func: 'ADD', target: 'opponent', value: -2, turns: 1 }
+                    ]
+                },
+                // DAMAGE.ATTACK - 造成伤害
+                {
+                    system: 'DAMAGE',
+                    func: 'ATTACK',
+                    node: NODE.DEAL_DAMAGE,
+                    target: 'opponent',
+                    power: 85,
+                    critRate: '10/16'
+                },
+                // 致命判定: +2层或+1层神耀
+                {
+                    system: 'BRANCH',
+                    node: NODE.AFTER_ATTACK,
+                    condition: (ctx) => ctx.wasCrit,
+                    onTrue: [
+                        { system: 'TEAM', func: 'FLAG', target: 'self', flag: 'godlyGloryEnergy', value: (ctx) => Math.min(6, (ctx.self.flags?.godlyGloryEnergy || 0) + 2) }
+                    ],
+                    onFalse: [
+                        { system: 'TEAM', func: 'FLAG', target: 'self', flag: 'godlyGloryEnergy', value: (ctx) => Math.min(6, (ctx.self.flags?.godlyGloryEnergy || 0) + 1) }
+                    ]
+                }
+            ]
+        }
+    ];
+
+    // =========================================================================
+    // 注册精灵
+    // =========================================================================
+    if (window.SOULBUFF?.REGISTER) {
+        window.SOULBUFF.REGISTER(SPIRIT.key, SOULBUFF);
     }
+    
+    window.SpiritRegistry = window.SpiritRegistry || {};
+    window.SpiritRegistry[SPIRIT.key] = {
+        ...SPIRIT,
+        soulbuff: SOULBUFF,
+        skills: SKILLS
+    };
 
-    registerSpirit(data, registerPhases);
+    console.log(`[Spirit] ${SPIRIT.name} loaded`);
 })();

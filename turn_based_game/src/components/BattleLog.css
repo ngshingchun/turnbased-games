@@ -1,0 +1,112 @@
+/* 戰鬥日誌樣式 */
+
+.battle-log {
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #0f3460;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-header {
+  padding: 8px 12px;
+  background: #0f3460;
+  border-bottom: 1px solid #16213e;
+}
+
+.log-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #eee;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.log-content {
+  flex: 1;
+  padding: 8px 12px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.log-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-content::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 3px;
+}
+
+.log-content::-webkit-scrollbar-thumb:hover {
+  background: #16213e;
+}
+
+.log-entry {
+  padding: 4px 0;
+  color: #aaa;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-entry.log-turn {
+  color: #667eea;
+  font-weight: 600;
+  padding: 8px 0;
+  margin: 8px 0;
+  border-top: 1px solid #0f3460;
+  border-bottom: 1px solid #0f3460;
+  text-align: center;
+}
+
+.log-entry.log-skill {
+  color: #eee;
+}
+
+.log-entry.log-damage {
+  color: #e94560;
+}
+
+.log-entry.log-heal {
+  color: #00ff88;
+}
+
+.log-entry.log-victory {
+  color: #00ff88;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.log-entry.log-defeat {
+  color: #e94560;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  padding: 12px 0;
+}
+
+
+

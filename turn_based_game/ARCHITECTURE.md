@@ -1,250 +1,332 @@
-# 效果系统架构文档
+# 战斗系统架构文档 v2.1
 
-## 模块层级
+## 概述
+
+本系统采用并行状态容器架构，以36节点的回合阶段系统为核心。
+支持6v6队伍战斗，每个系统独立文件，使用 `FUNC.SUBFUNC(node(s), handler)` 格式。
+
+## 核心架构
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        spirits/xxx.js                                │  精灵定义文件
-│              (技能、魂印描述、抗性配置、TurnPhase注册)                 │
-└─────────────────────────────┬───────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-              ▼               ▼               ▼
-┌─────────────────┐   ┌─────────────┐   ┌─────────────┐
-│   SkillEffect   │   │ SoulEffect  │   │  TurnPhase  │   效果定义层
-│   (技能效果)     │   │ (魂印效果)   │   │ (回合流程)   │
-└────────┬────────┘   └──────┬──────┘   └──────┬──────┘
-         │                   │                  │
-         └───────────────────┼──────────────────┘
-                             │
-                             ▼
+│                        BattleEngine v2.1                             │
+│                         战斗引擎 (6v6)                                │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+│  TurnPhase    │  │   TeamA       │  │   TeamB       │
+│  回合阶段容器  │◄─┤  队伍A (6只)  │  │  队伍B (6只)  │
+│  (36节点)     │  │               │  │               │
+└───────────────┘  └───────────────┘  └───────────────┘
+        │                  │                  │
+        │          ┌───────┴───────┐          │
+        │          │  SpiritState  │          │
+        │          │  当前精灵状态  │          │
+        ▼          └───────────────┘          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        EffectRouter                                  │  效果路由器
-└─────────────────────────────┬───────────────────────────────────────┘
-                              │
-         ┌────────────────────┼────────────────────┐
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐   ┌─────────────┐      ┌─────────────┐
-│   TurnEffect    │   │ CountEffect │      │ StatEffect  │   核心效果系统
-│   (回合效果)     │   │ (计数效果)  │      │ (属性/加成/ │   (同层级)
-│   +消除回合     │   │             │      │  反弹效果)  │
-└────────┬────────┘   └──────┬──────┘      └──────┬──────┘
-         │                   │                    │
-         └───────────────────┼────────────────────┘
-                             │
-    ┌────────────────────────┼────────────────────────┐
-    │            │           │           │            │
-    ▼            ▼           ▼           ▼            ▼
-┌────────┐ ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐
-│Status  │ │Damage   │ │ Heal     │ │ Shield  │ │ Block    │
-│Effect  │ │Effect   │ │ Effect   │ │ Effect  │ │ Effect   │
-└────┬───┘ └────┬────┘ └────┬─────┘ └────┬────┘ └────┬─────┘
-     │          │           │            │           │
-     └──────────┼───────────┼────────────┼───────────┘
-                │           │            │
-                ▼           ▼            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│          DamageSystem + ResistSystem + StatusRegistry                │  底层系统
-│          (伤害计算)    (抗性计算)      (状态注册表)                    │
+│                    独立系统 (FUNC.SUBFUNC格式)                        │
+│  TURN | COUNT | DAMAGE | HP | PP | STATS | STATUS | PRIO | SOULBUFF │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 回合阶段流程 (TurnPhases)
+## 系统格式: FUNC.SUBFUNC(node(s), handler)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ 1. OPEN_TURN      精灵登场（首次/切换）                               │
-│    └─> 加载精灵 TurnPhase 注册                                       │
-├─────────────────────────────────────────────────────────────────────┤
-│ 2. ENTRY          登场后一次性效果                                    │
-│    └─> 沧澜护盾、星皇之佑等                                           │
-├─────────────────────────────────────────────────────────────────────┤
-│ 3. TURN_START     回合开始                                           │
-│    └─> 魂印检测、状态检测                                             │
-├─────────────────────────────────────────────────────────────────────┤
-│ 4. CALCULATE_PRIORITY  计算先制                                      │
-│    └─> 基础先制 + 技能先制 + 效果先制                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│ 5. BEFORE_MOVE    技能使用前                                         │
-│    └─> 封锁检测、控制状态检测、PP检测                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│ 6. BEFORE_HIT     命中前                                             │
-│    └─> 闪避检测、免疫攻击检测（BlockEffect.checkAttackImmunity）      │
-├─────────────────────────────────────────────────────────────────────┤
-│ 7. CALCULATE_DAMAGE  伤害计算                                        │
-│    └─> 基础伤害 × 属性克制 × 加成/减益 × 暴击                          │
-├─────────────────────────────────────────────────────────────────────┤
-│ 8. ON_HIT         命中中（伤害应用）                                   │
-│    └─> 护盾吸收、伤害减免、实际扣血                                    │
-├─────────────────────────────────────────────────────────────────────┤
-│ 9. AFTER_HIT      命中后                                             │
-│    └─> X回合内XX效果、追加异常、追加固伤、追击判定                      │
-├─────────────────────────────────────────────────────────────────────┤
-│ 10. TURN_END      回合结束                                           │
-│    └─> DOT结算、回复结算、效果回合数-1、消除到期效果                   │
-├─────────────────────────────────────────────────────────────────────┤
-│ 11. DEATH_CHECK   死亡检测                                           │
-│    └─> 残留1HP判定、重生判定、精灵切换                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│ 12. BATTLE_END    战斗结束判定                                        │
-│    └─> 一方全灭则战斗结束                                             │
-└─────────────────────────────────────────────────────────────────────┘
-
-特殊事件：
-- SWITCH          切换精灵时 → OPEN_TURN → ENTRY
-- USE_ITEM        使用道具时（跳过技能流程）
-- SKIP_TURN       跳过回合（控制状态）→ 直接到 TURN_END
-```
-
-## 效果路由到阶段
-
-| 效果类型 | 触发阶段 | 说明 |
-|---------|---------|------|
-| 伤害计算 | CALCULATE_DAMAGE | 基础伤害修正 |
-| 技能伤害 | ON_HIT | 实际扣血 |
-| X回合XX | AFTER_HIT | 命中后附加 |
-| 追加异常 | AFTER_HIT | 命中后施加 |
-| 追加固伤 | AFTER_HIT | 命中后固伤 |
-| DOT伤害 | TURN_END | 每回合结算 |
-| 治疗回复 | TURN_END | 每回合结算 |
-| 免疫攻击 | BEFORE_HIT | 无效化攻击 |
-| 无视免疫 | BEFORE_HIT | 穿透免疫 |
-
-## 模块说明
-
-### 底层系统
-- **DamageSystem** - 伤害计算核心
-- **ResistSystem** - 抗性系统（伤害减免、状态免疫）
-- **StatusRegistry** - 异常状态注册表（新增）
-
-### 核心效果系统（同层级）
-- **TurnEffect** - 回合效果注册表，含消除回合效果功能
-- **CountEffect** - 计数效果注册表
-- **SoulEffect** - 魂印效果（精灵被动），路由到其他效果模块
-
-### 细分效果模块 (effects/)
-| 模块 | 功能 |
-|------|------|
-| StatusEffect | 异常状态施加/移除/检测，使用 StatusRegistry |
-| StatEffect | 属性修改/清除/反转/偷取/同步 + 伤害加成/弱化/反弹 |
-| DamageEffect | 固定伤害/百分比伤害/吸血 |
-| HealEffect | 治疗/回复/吸血检测 |
-| ShieldEffect | 计数护盾/血量护盾/免疫护盾 |
-| PriorityEffect | 先制修改/强制先制 |
-| CritEffect | 暴击率/必暴 |
-| ImmuneEffect | 异常免疫/弱化免疫 |
-| BlockEffect | 攻击封锁/属性封锁 + **免疫攻击/无视免疫** |
-
-### 效果路由器
-- **EffectRouter** - 统一入口，根据效果类型路由到对应模块
-
-## 免疫攻击系统 (BlockEffect)
-
-**重要区分**：
-- ❌ 免疫攻击 ≠ 护盾
-- ✅ 免疫攻击 = 令对手的攻击技能失去伤害和效果
+每个系统都使用统一的格式:
 
 ```javascript
-// 添加免疫攻击（如：不灭火种的免疫攻击、索倫森第五技能）
-BlockEffect.addAttackImmunity(game, target, count, source);
+// 示例: 在伤害节点造成100威力攻击
+const effect = DAMAGE.ATTACK(
+    [NODE.FIRST_DEAL_DAMAGE, NODE.SECOND_DEAL_DAMAGE],
+    { power: 100, special: false }
+);
 
-// 检查攻击是否被无效化（在 BEFORE_HIT 阶段）
-const result = BlockEffect.checkAttackImmunity(game, attacker, defender, skill, options);
-if (result.nullified) {
-    // 攻击被无效化，不执行伤害和效果
+// 执行效果
+effect.execute(context);
+```
+
+返回的效果对象包含:
+- `type`: 效果类型
+- `nodes`: 触发节点列表
+- `execute(ctx)`: 执行函数
+
+## 36节点回合阶段
+
+### 登场流程 (Nodes 1-5)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 1 | SWITCH_IN_PHASE | 换人阶段 |
+| 2 | ON_ENTRY_SPEED | 登场速度判定 |
+| 3 | AFTER_ENTRY | 登场后 |
+| 4 | SPIRIT_ACTION_PHASE | 精灵行动阶段 |
+| 5 | ON_ENTRY | 登场时效果 |
+
+### 回合开始 (Nodes 6-7)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 6 | TURN_START | 回合开始 |
+| **7** | **BATTLE_PHASE_START** | **决定先后手** |
+
+### 先手方行动 (Nodes 8-16)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 8 | FIRST_ACTION_START | 先手行动开始 |
+| 9 | FIRST_BEFORE_HIT | 先手命中前 |
+| 10 | FIRST_ON_HIT | 先手命中时 |
+| 11 | FIRST_SKILL_EFFECT | 先手技能效果 |
+| 12 | FIRST_BEFORE_DAMAGE | 先手伤害前 |
+| 13 | FIRST_DEAL_DAMAGE | 先手造成伤害 |
+| 14 | FIRST_AFTER_ATTACK | 先手攻击后 |
+| 15 | FIRST_ACTION_END | 先手行动结束 |
+| 16 | FIRST_AFTER_ACTION | 先手行动后 |
+
+### 死亡判定1 (Node 17)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 17 | DEATH_CHECK_1 | 任一方死亡跳过后手 |
+
+### 后手方行动 (Nodes 18-26)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 18 | SECOND_ACTION_START | 后手行动开始 |
+| 19 | SECOND_BEFORE_HIT | 后手命中前 |
+| 20 | SECOND_ON_HIT | 后手命中时 |
+| 21 | SECOND_SKILL_EFFECT | 后手技能效果 |
+| 22 | SECOND_BEFORE_DAMAGE | 后手伤害前 |
+| 23 | SECOND_DEAL_DAMAGE | 后手造成伤害 |
+| 24 | SECOND_AFTER_ATTACK | 后手攻击后 |
+| 25 | SECOND_ACTION_END | 后手行动结束 |
+| 26 | SECOND_AFTER_ACTION | 后手行动后 |
+
+### 回合结束 (Nodes 27-30)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 27 | BATTLE_PHASE_END | 战斗阶段结束 |
+| 28 | AFTER_BATTLE_PHASE | 战斗阶段后 |
+| 29 | TURN_END | 回合结束 |
+| 30 | AFTER_TURN | 回合后 |
+
+### 击败流程 (Nodes 31-36)
+| 节点 | ID | 说明 |
+|-----|-----|------|
+| 31 | NOT_DEFEATED | 未被击败 |
+| 32 | DEFEAT_CHECK | 击败判定 |
+| 33 | AFTER_DEFEATED | 被击败后 |
+| 34 | AFTER_DEFEAT_FOE | 击败对手后 |
+| 35 | ON_DEATH_SWITCH | 死亡换人 |
+| 36 | BATTLE_END_CHECK | 战斗结束判定 |
+
+## 独立系统文件
+
+| 系统 | 文件 | 功能 |
+|------|------|------|
+| TURN | turn_effect.js | ADD, BURN, POISON, HEAL, DISPEL, TICK, PROTECT |
+| COUNT | count_effect.js | ADD, CONSUME, SHIELD, REFLECT, STACK, ABSORB, IMMUNITY |
+| DAMAGE | damage.js | ATTACK, FIXED, PERCENT, TRUE, ABSORB |
+| HP | hp.js | HEAL, HEAL_PERCENT, SET, DRAIN, DRAIN_PERCENT |
+| PP | pp.js | USE, RESTORE, DRAIN, LOCK, CLEAR |
+| STATS | stats.js | MODIFY, CLEAR_UPS, CLEAR_DOWNS, REVERSE, STEAL, SYNC |
+| STATUS | status.js | APPLY, REMOVE, CHECK_CONTROL, CHECK_IMMUNE, TICK |
+| PRIO | priority.js | ADD, FORCE, DOWN, CALCULATE |
+| SOULBUFF | soulbuff.js | REGISTER, TRIGGER, DISABLE, ENABLE |
+
+## TeamState 队伍状态 (6只精灵)
+
+```javascript
+TeamState {
+    owner: 'A' | 'B',
+    spirits: [Spirit × 6],  // 6只精灵
+    currentIndex: 0,        // 当前精灵索引
+    
+    // 便捷访问
+    get current(),          // 当前精灵
+    
+    // 方法
+    switchTo(index),        // 换人
+    getAllStates(),         // 获取所有精灵状态
+    getByIndex(i),          // 按索引获取
+    registerEffect(...)     // 注册队伍效果
 }
-
-// 无视免疫（如：沧澜第五技能）
-skill.ignoreImmunity = true;
-// 或
-BlockEffect.checkAttackImmunity(game, attacker, defender, skill, { ignoreImmunity: true });
 ```
 
-## StatusRegistry 异常状态注册表
+## SpiritState 精灵状态
 
 ```javascript
-// 注册新异常状态
-StatusRegistry.register('newStatus', {
-    name: '新状态',
-    category: 'control',  // dot/control/debuff/restrict/special
-    isControl: true,      // 是否为控制状态
-    blockSwitch: false,   // 是否禁止切换
-    defaultTurns: 2,
-    stackable: false,
-    desc: '状态描述',
-    onApply: (game, target) => { /* 施加时回调 */ },
-    onTick: (game, target) => { /* 每回合结算 */ },
-    onRemove: (game, target) => { /* 移除时回调 */ }
-});
-
-// 随机选择状态（技能效果：随机两种异常）
-const statusIds = StatusRegistry.random(2, {
-    category: 'control',  // 只选控制状态
-    exclude: ['sleep']    // 排除睡眠
-});
-
-// 随机施加状态
-StatusRegistry.applyRandom(game, target, 2, { category: 'dot' });
+SpiritState {
+    // 基础信息
+    id, key, name, owner, element,
+    
+    // 子系统
+    hp: { current, max, damage(), heal() },
+    pp: { current, max, use(), restore(), lock() },
+    stats: { base, stage, calc(), modify() },
+    status: { current[], immune[], apply(), remove() },
+    turnEffects: { list[], add(), remove(), tick() },
+    countEffects: { data{}, add(), consume(), get() },
+    soulBuff: { key, active, run() },
+    shield: { hp, count, immune, absorb() },
+    resist: { fixed, percent, trueDmg, calc() },
+    
+    // 回合标记
+    turnFlags: { usedSkill, tookDamage, ... }
+}
 ```
 
-## 已合并/删除的模块
-- ~~DispelEffect~~ → 合并到 TurnEffect (dispelAll, dispelBuffs, dispelDebuffs)
-- ~~DamageBoostEffect~~ → 合并到 StatEffect (addDamageBoost, setVulnerability)
-- ~~ReflectEffect~~ → 合并到 StatEffect (reflectDamage)
+## 文件结构
 
-## 抗性系统
-
-### 默认抗性
-- 固定伤害减免: 35%
-- 百分比伤害减免: 35%
-- 真实伤害减免: 0%
-- 状态免疫: 0%
-
-### 特殊精灵配置
-```javascript
-// 星皇 - 完全免疫固定/百分比伤害
-resist: { fixed: 1, percent: 1, trueDmg: 0 }
-
-// 沧岚 - 70%概率免疫焚烬
-resist: { statusImmune: { immolate: 0.7 } }
+```
+core/
+├── turn_phase.js      # 36节点回合阶段
+├── spirit_state.js    # 精灵状态容器
+├── team_state.js      # 队伍状态容器 (6只)
+├── global_state.js    # 全局状态容器
+├── player_input.js    # 玩家输入容器
+├── turn_effect.js     # TURN 系统
+├── count_effect.js    # COUNT 系统
+├── damage.js          # DAMAGE 系统
+├── hp.js              # HP 系统
+├── pp.js              # PP 系统
+├── stats.js           # STATS 系统
+├── status.js          # STATUS 系统
+├── priority.js        # PRIO 系统
+├── soulbuff.js        # SOULBUFF 系统
+├── systems.js         # 系统整合与工具
+├── battle_engine.js   # 战斗引擎
+├── example_usage.js   # 使用示例
+└── index.js           # 模块索引
 ```
 
 ## HTML 加载顺序
 
 ```html
-<!-- 底层系统 -->
-<script src="damage_system.js"></script>
-<script src="resist_system.js"></script>
-<script src="status_registry.js"></script>
-<script src="turn_phases.js"></script>
-<script src="turneffect.js"></script>
-<script src="counteffect.js"></script>
-<script src="souleffect.js"></script>
+<!-- Core 容器 -->
+<script src="core/turn_phase.js"></script>
+<script src="core/spirit_state.js"></script>
+<script src="core/team_state.js"></script>
+<script src="core/global_state.js"></script>
+<script src="core/player_input.js"></script>
 
-<!-- 细分效果模块 -->
-<script src="effects/status_effect.js"></script>
-<script src="effects/stat_effect.js"></script>
-<script src="effects/damage_effect.js"></script>
-<script src="effects/heal_effect.js"></script>
-<script src="effects/shield_effect.js"></script>
-<script src="effects/priority_effect.js"></script>
-<script src="effects/crit_effect.js"></script>
-<script src="effects/immune_effect.js"></script>
-<script src="effects/block_effect.js"></script>
+<!-- 独立系统 -->
+<script src="core/turn_effect.js"></script>
+<script src="core/count_effect.js"></script>
+<script src="core/damage.js"></script>
+<script src="core/hp.js"></script>
+<script src="core/pp.js"></script>
+<script src="core/stats.js"></script>
+<script src="core/status.js"></script>
+<script src="core/priority.js"></script>
+<script src="core/soulbuff.js"></script>
 
-<!-- 路由器 & 索引 -->
-<script src="effects/effect_router.js"></script>
-<script src="effects/index.js"></script>
+<!-- 整合与引擎 -->
+<script src="core/systems.js"></script>
+<script src="core/battle_engine.js"></script>
+<script src="core/index.js"></script>
 
 <!-- 精灵定义 -->
 <script src="spirits/registry.js"></script>
 <script src="spirits/xxx.js"></script>
 
-<!-- 技能效果 -->
-<script src="skill_effects.js"></script>
-
 <!-- 主游戏 -->
 <script src="game.js"></script>
+```
+
+## 使用示例
+
+### 创建6v6战斗
+
+```javascript
+const engine = Core.createBattle(
+    // A队6只精灵
+    [
+        { name: '火焰龙', maxHp: 1000, attack: 120 },
+        { name: '水精灵', maxHp: 900, attack: 100 },
+        { name: '雷电兽', maxHp: 800, attack: 140 },
+        { name: '岩石魔', maxHp: 1200, defense: 150 },
+        { name: '风之鸟', maxHp: 750, speed: 150 },
+        { name: '暗影龙', maxHp: 950, spAttack: 130 }
+    ],
+    // B队6只精灵
+    [
+        { name: '冰霜巨人', maxHp: 1100 },
+        { name: '光明使者', maxHp: 850 },
+        { name: '毒蛇王', maxHp: 800 },
+        { name: '钢铁战士', maxHp: 1300 },
+        { name: '幻影忍者', maxHp: 700 },
+        { name: '圣光天使', maxHp: 1000 }
+    ]
+);
+```
+
+### 每个节点都可输入指令
+
+```javascript
+// 执行回合，在每个节点传入handler
+await engine.executeTurn({
+    // Node 6: 回合开始
+    [NODE.TURN_START]: async (ctx) => {
+        console.log('回合开始');
+    },
+    
+    // Node 13: 先手造成伤害
+    [NODE.FIRST_DEAL_DAMAGE]: async (ctx) => {
+        // 使用 DAMAGE 系统
+        const effect = DAMAGE.ATTACK([NODE.FIRST_DEAL_DAMAGE], { power: 100 });
+        effect.execute(ctx);
+    },
+    
+    // Node 29: 回合结束
+    [NODE.TURN_END]: async (ctx) => {
+        // 回合结束效果
+    }
+});
+```
+
+### 使用技能构建器
+
+```javascript
+const fireBlast = skill('烈焰风暴')
+    .pp(15)
+    .power(150)
+    .type('fire')
+    .special()
+    .damage({ nodes: [NODE.FIRST_DEAL_DAMAGE, NODE.SECOND_DEAL_DAMAGE] })
+    .status('burn', 2, { chance: 50 })
+    .build();
+```
+
+### 使用精灵构建器
+
+```javascript
+const dragon = spirit('火焰龙')
+    .type('fire')
+    .stats(1000, 120, 100, 150, 100, 110)
+    .skill(fireBlast)
+    .soulBuff({
+        name: '炎龙魂',
+        effects: [...]
+    })
+    .build();
+```
+
+### 组合效果
+
+```javascript
+// 组合多个效果
+const combo = combine(
+    DAMAGE.ATTACK([NODE.FIRST_DEAL_DAMAGE], { power: 80 }),
+    HP.DRAIN([NODE.FIRST_AFTER_ATTACK], { ratio: 0.5 })
+);
+
+// 条件效果
+const emergencyHeal = when(
+    (ctx) => ctx.self.hp.percent < 50,
+    HP.HEAL_PERCENT([NODE.TURN_END], { percent: 10 })
+);
+
+// 几率效果
+const luckyHit = chance(30,
+    DAMAGE.ATTACK([NODE.FIRST_DEAL_DAMAGE], { power: 200, crit: true })
+);
 ```
